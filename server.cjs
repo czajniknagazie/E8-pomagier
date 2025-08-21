@@ -165,7 +165,7 @@ app.get("/api/exams/:id", auth(), (req, res) => {
   const ids = JSON.parse(exam.tasks || "[]");
   if (!ids.length) return res.json({ id: exam.id, name: exam.name, tasks: [] });
 
-  const q = `SELECT * FROM tasks WHERE id IN (${ids.map(()=>"?").join(",")})`;
+  const q = `SELECT * FROM tasks WHERE id IN (${ids.map(()=>"?").join(",")}) ORDER BY id ASC`;
   const rows = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
   
   const map = new Map(rows.map(r=>[r.id, r]));
