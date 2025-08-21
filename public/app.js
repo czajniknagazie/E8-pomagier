@@ -191,6 +191,9 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'exam-start':
                 await renderExamTask();
                 break;
+            case 'exam-review':
+                await renderExamReviewTask();
+                break;
         }
     }
 
@@ -307,7 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
             examsHtml += exams.map(exam => `
                 <li class="list-item">
                     <span><strong>${exam.name}</strong></span>
-                    <button data-exam-id="${exam.id}" data-exam-name="${exam.name}">Rozpocznij egzamin</button>
+                    <div class="exam-action-buttons">
+                        <button data-exam-id="${exam.id}" data-exam-name="${exam.name}" data-action="start">Rozpocznij egzamin</button>
+                        <button data-exam-id="${exam.id}" data-exam-name="${exam.name}" data-action="review">Przeglądaj</button>
+                    </div>
                 </li>
             `).join('');
         } else {
@@ -320,7 +326,12 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', (e) => {
                 const examId = e.target.dataset.examId;
                 const examName = e.target.dataset.examName;
-                startExam(examId, examName);
+                const action = e.target.dataset.action;
+                if (action === 'start') {
+                    startExam(examId, examName);
+                } else if (action === 'review') {
+                    startExamReview(examId, examName);
+                }
             });
         });
     }
@@ -469,6 +480,109 @@ document.addEventListener('DOMContentLoaded', () => {
         appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null };
     }
     
+    // --- New Review Mode ---
+    async function startExamReview(examId, examName) {
+        const examData = await api.request(`/exams/${examId}`);
+        if (!examData || !examData.tasks.length) {
+            alert('Ten egzamin jest pusty lub nie można go załadować.');
+            return;
+        }
+
+        appState.examState = {
+            active: true,
+            tasks: examData.tasks,
+            currentIndex: 0,
+            answers: {},
+            timer: null,
+            examId,
+            examName
+        };
+
+        navigateTo('exam-review');
+    }
+
+    function renderExamReviewTask() {
+        const { tasks, currentIndex } = appState.examState;
+        const task = tasks[currentIndex];
+        const answered = appState.examState.answers[task.id] !== undefined;
+
+        let answerHtml = '';
+        if (task.type === 'zamkniete') {
+            answerHtml = `
+                <div class="task-options">
+                    ${task.opcje.map(opt => `
+                        <label>
+                            <input type="radio" name="answer" value="${opt}"> ${opt}
+                        </label>
+                    `).join('')}
+                </div>`;
+        } else {
+            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
+        }
+
+        const taskHtml = `
+            <h1>Przeglądanie: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
+            <div class="content-box">
+                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
+                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
+                <form id="task-review-form">
+                    ${answerHtml}
+                    <button type="submit">Sprawdź</button>
+                </form>
+                <div id="result-box"></div>
+                <div class="exam-navigation">
+                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
+                    <span></span>
+                    <button id="next-btn" ${currentIndex === tasks.length - 1 ? 'disabled' : ''}>Następne</button>
+                </div>
+            </div>
+        `;
+        mainContent.innerHTML = taskHtml;
+        
+        const form = document.getElementById('task-review-form');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const task = appState.examState.tasks[appState.examState.currentIndex];
+            let userAnswer;
+            if (task.type === 'zamkniete') {
+                const selected = form.querySelector('input[name="answer"]:checked');
+                userAnswer = selected ? selected.value : '';
+            } else {
+                userAnswer = form.querySelector('#open-answer').value;
+            }
+            
+            const isCorrect = userAnswer.toLowerCase() === task.odpowiedz.toLowerCase();
+            showReviewResult(isCorrect, task.odpowiedz);
+            
+            // Disable form after checking
+            form.querySelector('button[type="submit"]').disabled = true;
+            if (task.type === 'zamkniete') {
+                form.querySelectorAll('input').forEach(input => input.disabled = true);
+            } else {
+                form.querySelector('#open-answer').disabled = true;
+            }
+        });
+        
+        document.getElementById('prev-btn').addEventListener('click', () => navigateReview(-1));
+        document.getElementById('next-btn').addEventListener('click', () => navigateReview(1));
+    }
+    
+    function navigateReview(direction) {
+        const newIndex = appState.examState.currentIndex + direction;
+        appState.examState.currentIndex = newIndex;
+        renderExamReviewTask();
+    }
+    
+    function showReviewResult(isCorrect, correctAnswer) {
+        const resultBox = document.getElementById('result-box');
+        if (isCorrect) {
+            resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
+        } else {
+            resultBox.innerHTML = `<div class="result-box incorrect">Błędna odpowiedź. Poprawna to: <strong>${correctAnswer}</strong></div>`;
+        }
+    }
+
+
     // Browse tasks
     async function renderBrowseTasks() {
         mainContent.innerHTML = `
