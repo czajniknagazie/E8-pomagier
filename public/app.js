@@ -707,18 +707,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const tasks = await api.request('/tasks');
         const listEl = document.getElementById('admin-tasks-list');
         listEl.innerHTML = `
-            <ul class="item-list">
+            <ul class="item-list" id="tasks-to-manage">
                 ${tasks.map(task => `
-                    <li class="task-list-item">
+                    <li class="task-list-item" data-id="${task.id}">
                         <img src="${task.tresc}" alt="Miniatura">
                         <div>
                             <strong>Zadanie #${task.id}</strong><br>
                             <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}, Odp: ${task.odpowiedz}</small>
                         </div>
-                        <div></div>
+                        <button class="delete-btn" data-id="${task.id}" data-type="task">Usuń</button>
                     </li>
                 `).join('')}
             </ul>`;
+        
+        document.getElementById('tasks-to-manage').addEventListener('click', handleDeleteClick);
+    }
+    
+    async function handleDeleteTask(id) {
+        if (confirm(`Czy na pewno chcesz usunąć zadanie #${id}?`)) {
+            const result = await api.request(`/tasks/${id}`, 'DELETE');
+            if (result) {
+                alert(`Zadanie #${id} zostało usunięte.`);
+                navigateTo('admin-zadania');
+            }
+        }
     }
 
     function renderBulkAddTaskForm() {
@@ -823,6 +835,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function renderAdminExams() {
+        const exams = await api.request('/exams');
         mainContent.innerHTML = `
             <h1>Zarządzaj Egzaminami</h1>
             <div class="content-box wide">
@@ -834,13 +847,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button type="submit">Stwórz Egzamin</button>
                 </form>
                 <hr>
+                <h2>Istniejące egzaminy</h2>
+                <div id="admin-exams-list">Ładowanie...</div>
+                <hr>
                 <h3>Wybierz zadania do egzaminu</h3>
                 <div id="exam-tasks-list">Ładowanie...</div>
             </div>`;
         
+        const examsListEl = document.getElementById('admin-exams-list');
+        if (exams && exams.length) {
+            examsListEl.innerHTML = `
+                <ul class="item-list" id="exams-to-manage">
+                    ${exams.map(exam => `
+                        <li class="list-item" data-id="${exam.id}">
+                            <span><strong>${exam.name}</strong></span>
+                            <button class="delete-btn" data-id="${exam.id}" data-type="exam">Usuń</button>
+                        </li>
+                    `).join('')}
+                </ul>`;
+            examsListEl.addEventListener('click', handleDeleteClick);
+        } else {
+            examsListEl.innerHTML = '<p>Brak istniejących egzaminów.</p>';
+        }
+
         const tasks = await api.request('/tasks');
-        const listEl = document.getElementById('exam-tasks-list');
-        listEl.innerHTML = `
+        const tasksListEl = document.getElementById('exam-tasks-list');
+        tasksListEl.innerHTML = `
             <ul class="item-list">
                 ${tasks.map(task => `
                     <li class="task-list-item">
@@ -855,6 +887,16 @@ document.addEventListener('DOMContentLoaded', () => {
             </ul>`;
             
         document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
+    }
+    
+    async function handleDeleteExam(id) {
+        if (confirm(`Czy na pewno chcesz usunąć egzamin? Spowoduje to usunięcie wszystkich powiązanych z nim wyników.`)) {
+            const result = await api.request(`/exams/${id}`, 'DELETE');
+            if (result) {
+                alert('Egzamin został usunięty.');
+                navigateTo('admin-egzaminy');
+            }
+        }
     }
 
     async function handleCreateExam(e) {
@@ -873,6 +915,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result) {
             alert(`Pomyślnie utworzono egzamin "${name}".`);
             navigateTo('egzaminy');
+        }
+    }
+    
+    function handleDeleteClick(e) {
+        if (e.target.classList.contains('delete-btn')) {
+            const id = e.target.dataset.id;
+            const type = e.target.dataset.type;
+            
+            if (type === 'task') {
+                handleDeleteTask(id);
+            } else if (type === 'exam') {
+                handleDeleteExam(id);
+            }
         }
     }
 
