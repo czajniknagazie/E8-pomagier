@@ -1,4 +1,5 @@
 // server.cjs
+
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -55,7 +56,6 @@ app.post("/api/admin/login", (req, res) => {
   const token = signToken(name, "admin");
   res.json({ token, role: "admin", name });
 });
-
 // --- Tasks ---
 app.get("/api/tasks", auth(), (req, res) => {
     const { search = '' } = req.query;
@@ -91,7 +91,6 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     }
     res.json(task || null);
 });
-
 // --- Solved Tasks ---
 app.post("/api/solved", auth(), (req, res) => {
   const { taskId, isCorrect } = req.body || {};
@@ -102,6 +101,17 @@ app.post("/api/solved", auth(), (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+// NOWOŚĆ: Endpoint do resetowania postępów
+app.delete("/api/solved", auth(), (req, res) => {
+  const user = req.user.name;
+  try {
+    db.prepare("DELETE FROM solved WHERE user = ?").run(user);
+    res.json({ success: true, message: "Postępy zresetowane." });
+  } catch (e) {
+    res.status(500).json({ error: "Błąd serwera podczas resetowania postępów: " + e.message });
   }
 });
 
@@ -123,7 +133,6 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   }));
   res.json({ success: true, files });
 });
-
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   const { tasks } = req.body || {};
@@ -146,7 +155,6 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   trx(tasks);
   res.json({ success: true, count: tasks.length });
 });
-
 // --- Usuwanie zadań ---
 app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
     const { id } = req.params;
@@ -161,13 +169,11 @@ app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
 // --- Exams ---
 app.get("/api/exams", auth(), (req, res) => {
   const list = db.prepare("SELECT id, name FROM exams ORDER BY name ASC").all();
   res.json(list);
 });
-
 app.get("/api/exams/:id", auth(), (req, res) => {
   const exam = db.prepare("SELECT id, name, tasks FROM exams WHERE id=?").get(req.params.id);
   if (!exam) return res.status(404).json({ error: "Nie ma takiego egzaminu" });
@@ -219,7 +225,6 @@ app.delete("/api/exams/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
 // --- Exam Results and Stats ---
 app.post("/api/results", auth(), (req, res) => {
     const { examId, examName, correct, wrong, total, percent } = req.body || {};
@@ -227,7 +232,6 @@ app.post("/api/results", auth(), (req, res) => {
       .run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent));
     res.json({ success: true });
 });
-
 app.get("/api/stats", auth(), (req, res) => {
     const user = req.user.name;
 

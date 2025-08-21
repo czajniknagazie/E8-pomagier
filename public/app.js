@@ -20,8 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginContainer = document.getElementById('login-container');
     const appContainer = document.getElementById('app-container');
     const mainContent = document.getElementById('main-content');
-    const nav = document.getElementById('main-nav');
-
+    
     // --- API HELPER ---
     const api = {
         async request(endpoint, method = 'GET', body = null) {
@@ -35,6 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             try {
                 const response = await fetch(`/api${endpoint}`, options);
+
+                if (response.status === 401) {
+                    alert("Twoja sesja wygasła lub jest nieprawidłowa. Zaloguj się ponownie.");
+                    logout();
+                    return null;
+                }
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Wystąpił błąd');
@@ -57,6 +63,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Authorization': `Bearer ${appState.token}` },
                     body: formData
                 });
+                if (response.status === 401) {
+                    alert("Twoja sesja wygasła lub jest nieprawidłowa. Zaloguj się ponownie.");
+                    logout();
+                    return null;
+                }
                 if (!response.ok) throw new Error('Błąd wysyłania plików.');
                 return response.json();
             } catch (err) {
@@ -120,6 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
         showApp();
     }
 
+    function logout() {
+        localStorage.removeItem('e8-token');
+        localStorage.removeItem('e8-user');
+        window.location.reload();
+    }
+
     function showLogin() {
         loginContainer.classList.remove('hidden');
         appContainer.classList.add('hidden');
@@ -137,21 +154,43 @@ document.addEventListener('DOMContentLoaded', () => {
             adminNav.classList.add('hidden');
         }
 
-        setupNavListeners();
+        setupNavigation(); // Centralna funkcja do obsługi nawigacji
+        document.getElementById('logout-btn').addEventListener('click', logout);
         navigateTo('wszystkie');
     }
 
     // --- NAVIGATION ---
-    function setupNavListeners() {
-        nav.addEventListener('click', (e) => {
-            if (e.target.tagName === 'BUTTON') {
-                const view = e.target.dataset.view;
-                if (view) {
-                    navigateTo(view);
+    function setupNavigation() {
+        const navEl = document.getElementById('main-nav');
+        const menuToggle = document.getElementById('menu-toggle');
+        const menuOverlay = document.getElementById('menu-overlay');
+
+        const closeMenu = () => {
+            navEl.classList.remove('nav-visible');
+            menuOverlay.classList.add('hidden');
+        };
+
+        // Listener dla przycisków w panelu nawigacji
+        navEl.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON' && e.target.dataset.view) {
+                // Jeśli menu mobilne jest otwarte, zamknij je po kliknięciu
+                if (navEl.classList.contains('nav-visible')) {
+                    closeMenu();
                 }
+                navigateTo(e.target.dataset.view);
             }
         });
+
+        // Listenery dla mobilnego menu (hamburger i tło)
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navEl.classList.add('nav-visible');
+            menuOverlay.classList.remove('hidden');
+        });
+
+        menuOverlay.addEventListener('click', closeMenu);
     }
+
 
     function navigateTo(view) {
         if (appState.examState.active && !view.startsWith('exam-')) {
@@ -208,7 +247,13 @@ document.addEventListener('DOMContentLoaded', () => {
         appState.currentTask = task;
 
         if (!task) {
-            mainContent.innerHTML += `<div class="content-box"><p>Gratulacje! Rozwiązałeś wszystkie dostępne zadania w tym trybie.</p></div>`;
+            mainContent.innerHTML += `
+                <div class="content-box">
+                    <p><strong>Gratulacje! 🎉</strong></p>
+                    <p>Rozwiązałeś wszystkie dostępne zadania w tym trybie. Chcesz zacząć od nowa?</p>
+                    <button id="reset-progress-btn">Resetuj postępy</button>
+                </div>`;
+            document.getElementById('reset-progress-btn').addEventListener('click', handleResetProgress);
             return;
         }
 
@@ -301,6 +346,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('next-task-btn').addEventListener('click', () => renderView(appState.currentView));
     }
 
+    async function handleResetProgress() {
+        const isConfirmed = confirm("Czy na pewno chcesz zresetować swoje postępy? Wszystkie rozwiązane zadania zostaną oznaczone jako nierozwiązane, ale Twoje wyniki z egzaminów pozostaną nietknięte.");
+
+        if (isConfirmed) {
+            const result = await api.request('/solved', 'DELETE');
+            if (result && result.success) {
+                alert("Twoje postępy zostały zresetowane!");
+                navigateTo(appState.currentView); // Reload view to get a new task
+            }
+        }
+    }
 
     // Exams List
     async function renderExamsList() {
@@ -435,27 +491,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             userAnswer = document.getElementById('open-answer').value;
         }
-        appState.examState.answers[task.id] = userAnswer;
+        if (userAnswer) {
+            appState.examState.answers[task.id] = userAnswer;
+        }
     }
 
     async function endExam(isFinished) {
         clearInterval(appState.examState.timer);
         
         if (isFinished) {
+            saveCurrentExamAnswer(); // Zapisz ostatnią odpowiedź przed podsumowaniem
             let correctCount = 0;
             let wrongCount = 0;
+            let closedTasksTotal = 0;
 
             appState.examState.tasks.forEach(task => {
                 const userAnswer = appState.examState.answers[task.id];
-                if (userAnswer && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase()) {
-                    correctCount++;
-                } else {
-                    wrongCount++;
+                if (task.type === 'zamkniete') {
+                    closedTasksTotal++;
+                    if (userAnswer && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase()) {
+                        correctCount++;
+                    } else {
+                        wrongCount++;
+                    }
                 }
             });
 
             const total = appState.examState.tasks.length;
-            const percent = total > 0 ? ((correctCount / total) * 100).toFixed(0) : 0;
+            const percent = closedTasksTotal > 0 ? ((correctCount / closedTasksTotal) * 100) : 0;
             
             await api.request('/results', 'POST', {
                 examId: appState.examState.examId,
@@ -470,7 +533,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h1>Wyniki Egzaminu</h1>
                 <div class="content-box">
                     <h2>${appState.examState.examName}</h2>
-                    <p>Uzyskany wynik: <strong>${correctCount} / ${total} (${percent}%)</strong></p>
+                    <p>Uzyskany wynik (z zadań zamkniętych): <strong>${correctCount} / ${closedTasksTotal} (${percent.toFixed(0)}%)</strong></p>
+                    <p>Całkowita liczba zadań w arkuszu: ${total}. Zadania otwarte wymagają samodzielnej weryfikacji.</p>
                     <button id="back-to-exams">Wróć do listy egzaminów</button>
                 </div>`;
             document.getElementById('back-to-exams').addEventListener('click', () => navigateTo('egzaminy'));
@@ -504,8 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderExamReviewTask() {
         const { tasks, currentIndex } = appState.examState;
         const task = tasks[currentIndex];
-        const answered = appState.examState.answers[task.id] !== undefined;
-
+        
         let answerHtml = '';
         if (task.type === 'zamkniete') {
             answerHtml = `
@@ -554,7 +617,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const isCorrect = userAnswer.toLowerCase() === task.odpowiedz.toLowerCase();
             showReviewResult(isCorrect, task.odpowiedz);
             
-            // Disable form after checking
             form.querySelector('button[type="submit"]').disabled = true;
             if (task.type === 'zamkniete') {
                 form.querySelectorAll('input').forEach(input => input.disabled = true);
@@ -705,6 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('show-add-task-form').addEventListener('click', renderBulkAddTaskForm);
         
         const tasks = await api.request('/tasks');
+        if(!tasks) return;
         const listEl = document.getElementById('admin-tasks-list');
         listEl.innerHTML = `
             <ul class="item-list">
@@ -753,7 +816,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const uploadResult = await api.upload(files);
         if (!uploadResult || !uploadResult.files) {
-            alert('Nie udało się wysłać plików.');
             return;
         }
         
@@ -761,7 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const taskType = document.getElementById('task-type').value;
         previewContainer.innerHTML = '';
 
-        uploadResult.files.forEach((file, index) => {
+        uploadResult.files.forEach((file) => {
             previewContainer.innerHTML += `
                 <div class="upload-item" data-url="${file.url}">
                     <img src="${file.url}" alt="Podgląd zadania">
@@ -839,6 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         
         const tasks = await api.request('/tasks');
+        if(!tasks) return;
         const listEl = document.getElementById('exam-tasks-list');
         listEl.innerHTML = `
             <ul class="item-list">
