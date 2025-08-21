@@ -48,8 +48,6 @@ db.exec(`
       FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
       UNIQUE(user, task_id)
     );
-    
-    CREATE INDEX IF NOT EXISTS idx_tasks_arkusz ON tasks (arkusz);
 `);
 
 console.log("🏁 Inicjalizacja bazy zakończona. (bez importu z tasks_import.json)");

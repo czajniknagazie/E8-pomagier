@@ -94,12 +94,6 @@ body {
     padding: 5px;
     font-size: 0.9rem;
 }
-.cke-info {
-    font-size: 0.8rem;
-    color: var(--gray-dark);
-    margin-top: 20px;
-    text-align: center;
-}
 
 /* --- Main App Layout --- */
 #app-container {
@@ -235,9 +229,6 @@ main {
     justify-content: space-between;
     margin-top: 20px;
 }
-.exam-action-buttons button {
-    margin-right: 10px;
-}
 
 /* --- Admin Panel & Lists --- */
 .item-list {
@@ -302,19 +293,30 @@ main {
     border-radius: 5px;
 }
 
-/* Nowe style do przycisku usuwania */
-.delete-btn {
-    background-color: var(--red);
-    color: var(--white);
-    border: none;
-    padding: 8px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.2s;
-    white-space: nowrap; /* Zapobiega łamaniu tekstu */
+/* --- Stats --- */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
 }
-
-.delete-btn:hover {
-    background-color: #b91c1c;
+.stat-card {
+    background: var(--gray-light);
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+}
+.stat-card h3 {
+    margin-top: 0;
+}
+.stat-card .value {
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+.stat-card .advice {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #e0e7ff;
+    color: #3730a3;
+    font-weight: bold;
 }
