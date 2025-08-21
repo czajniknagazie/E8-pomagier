@@ -1,4 +1,4 @@
-// server.cjs (poprawiony)
+// server.cjs
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -191,10 +191,7 @@ app.post("/api/exams", auth("admin"), (req, res) => {
     }
 
     const dbTransaction = db.transaction(() => {
-        // Create the exam
         const examInfo = db.prepare("INSERT INTO exams (name, tasks) VALUES (?, ?)").run(name, JSON.stringify(taskIds));
-        
-        // Update the arkusz for each task
         const updateStmt = db.prepare("UPDATE tasks SET arkusz = ? WHERE id = ?");
         for (const taskId of taskIds) {
             updateStmt.run(arkuszName, taskId);
