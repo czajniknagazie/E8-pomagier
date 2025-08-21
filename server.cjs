@@ -175,14 +175,11 @@ app.get("/api/exams/:id", auth(), (req, res) => {
   const ids = JSON.parse(exam.tasks || "[]");
   if (!ids.length) return res.json({ id: exam.id, name: exam.name, tasks: [] });
 
-  // Poprawione zapytanie SQL z ORDER BY id ASC
+  // Poprawione zapytanie SQL, które sortuje zadania po ID
   const q = `SELECT * FROM tasks WHERE id IN (${ids.map(()=>"?").join(",")}) ORDER BY id ASC`;
-  const rows = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
+  const tasks = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
   
-  const map = new Map(rows.map(r=>[r.id, r]));
-  const ordered = ids.map(id=>map.get(id)).filter(Boolean);
-  
-  res.json({ id: exam.id, name: exam.name, tasks: ordered });
+  res.json({ id: exam.id, name: exam.name, tasks: tasks });
 });
 
 app.post("/api/exams", auth("admin"), (req, res) => {
