@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generator zadań E8</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="login-container" class="login-container">
+        <div class="login-form">
+            <h2>Generator E8</h2>
+            <div id="student-login-view">
+                <h3>Zaloguj się jako uczeń</h3>
+                <form id="student-login-form">
+                    <input type="text" id="student-name" placeholder="Wpisz swoją nazwę" required>
+                    <button type="submit">Wejdź</button>
+                </form>
+                <p>Nie masz konta? Po prostu wpisz nazwę i zacznij!</p>
+                <button class="link-button" id="show-admin-login">Jesteś administratorem?</button>
+            </div>
+            <div id="admin-login-view" class="hidden">
+                <h3>Logowanie administratora</h3>
+                <form id="admin-login-form">
+                    <input type="text" id="admin-name" placeholder="Nazwa administratora" required>
+                    <input type="password" id="admin-code" placeholder="Kod dostępu" required>
+                    <button type="submit">Zaloguj</button>
+                </form>
+                <button class="link-button" id="show-student-login">Wróć do logowania ucznia</button>
+            </div>
+            <p class="cke-info">Materiały CKE zostały użyte wyłącznie w celach edukacyjnych.</p>
+        </div>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <nav id="main-nav">
+            <div class="nav-top">
+                <h2>Tryby</h2>
+                <button data-view="wszystkie">Wszystkie</button>
+                <button data-view="zamkniete">Tylko zamknięte</button>
+                <button data-view="otwarte">Tylko otwarte</button>
+                <hr>
+                <h2>Egzaminy</h2>
+                <button data-view="egzaminy">Lista egzaminów</button>
+                <button data-view="przegladaj">Przeglądaj wszystkie zadania</button>
+                <hr>
+                <h2>Twoje postępy</h2>
+                <button data-view="statystyki">Arkusz osiągnięć</button>
+            </div>
+            <div class="nav-bottom">
+                 <p id="zalogowany-jako"></p>
+                <div id="admin-panel-nav" class="hidden">
+                    <hr>
+                    <h2>Panel Admina</h2>
+                    <button data-view="admin-zadania">Zarządzaj zadaniami</button>
+                    <button data-view="admin-egzaminy">Zarządzaj egzaminami</button>
+                </div>
+            </div>
+        </nav>
+        <main id="main-content">
+            </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
