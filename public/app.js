@@ -720,7 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('')}
             </ul>`;
         
-        document.getElementById('tasks-to-manage').addEventListener('click', handleDeleteClick);
+        document.getElementById('admin-tasks-list').addEventListener('click', handleDeleteClick);
     }
     
     async function handleDeleteTask(id) {
