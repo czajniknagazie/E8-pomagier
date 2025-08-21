@@ -1,4 +1,4 @@
-// server.cjs (poprawiony)
+// server.cjs
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -9,7 +9,6 @@ const fs = require("fs");
 const path = require("path");
 
 dotenv.config();
-
 const app = express();
 const db = new Database(process.env.DB_PATH || "./data.sqlite");
 const PORT = process.env.PORT || 3000;
@@ -49,7 +48,6 @@ app.post("/api/login-student", (req, res) => {
   const token = signToken(name, "student");
   res.json({ token, role: "student", name });
 });
-
 app.post("/api/admin/login", (req, res) => {
   const { name, code } = req.body || {};
   if (!name || !code) return res.status(400).json({ error: "Brak nazwy lub kodu" });
@@ -94,7 +92,6 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     res.json(task || null);
 });
 
-
 // --- Solved Tasks ---
 app.post("/api/solved", auth(), (req, res) => {
   const { taskId, isCorrect } = req.body || {};
@@ -107,7 +104,6 @@ app.post("/api/solved", auth(), (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
-
 
 // --- Image Upload ---
 const storage = multer.diskStorage({
@@ -128,7 +124,6 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   res.json({ success: true, files });
 });
 
-
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   const { tasks } = req.body || {};
@@ -140,7 +135,7 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
     for (const t of arr) {
       ins.run({
         type: t.type,
-        tresc: t.tresc, // This is the image URL
+        tresc: t.tresc,
         odpowiedz: t.odpowiedz,
         opcje: t.opcje ? JSON.stringify(t.opcje) : null,
         punkty: Number(t.punkty) || 1,
@@ -150,6 +145,21 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
 
   trx(tasks);
   res.json({ success: true, count: tasks.length });
+});
+
+// --- Usuwanie zadań ---
+app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
+    const { id } = req.params;
+    try {
+        const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+        if (info.changes > 0) {
+            res.status(204).send(); // Sukces, brak treści
+        } else {
+            res.status(404).json({ error: "Zadanie nie znaleziono." });
+        }
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 // --- Exams ---
@@ -165,6 +175,7 @@ app.get("/api/exams/:id", auth(), (req, res) => {
   const ids = JSON.parse(exam.tasks || "[]");
   if (!ids.length) return res.json({ id: exam.id, name: exam.name, tasks: [] });
 
+  // Poprawione zapytanie SQL z ORDER BY id ASC
   const q = `SELECT * FROM tasks WHERE id IN (${ids.map(()=>"?").join(",")}) ORDER BY id ASC`;
   const rows = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
   
@@ -181,10 +192,7 @@ app.post("/api/exams", auth("admin"), (req, res) => {
     }
 
     const dbTransaction = db.transaction(() => {
-        // Create the exam
         const examInfo = db.prepare("INSERT INTO exams (name, tasks) VALUES (?, ?)").run(name, JSON.stringify(taskIds));
-        
-        // Update the arkusz for each task
         const updateStmt = db.prepare("UPDATE tasks SET arkusz = ? WHERE id = ?");
         for (const taskId of taskIds) {
             updateStmt.run(arkuszName, taskId);
@@ -197,6 +205,21 @@ app.post("/api/exams", auth("admin"), (req, res) => {
         res.json({ success: true, id: info.lastInsertRowid });
     } catch (e) {
         res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message });
+    }
+});
+
+// --- Usuwanie egzaminów ---
+app.delete("/api/exams/:id", auth("admin"), (req, res) => {
+    const { id } = req.params;
+    try {
+        const info = db.prepare("DELETE FROM exams WHERE id = ?").run(id);
+        if (info.changes > 0) {
+            res.status(204).send();
+        } else {
+            res.status(404).json({ error: "Egzamin nie znaleziono." });
+        }
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
 
