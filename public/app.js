@@ -758,7 +758,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Stats View (NEW) ---
+    // --- Stats View ---
     async function renderStatsView() {
         mainContent.innerHTML = '<h1>Arkusz Osiągnięć</h1><p>Ładowanie danych...</p>';
         const stats = await api.request('/stats');
@@ -848,7 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ADMIN VIEWS ---
     
-    // Admin Tasks (NEW)
+    // Admin Tasks
     async function renderAdminTasks() {
         const tasks = await api.request('/tasks');
         let tasksHtml = `
@@ -921,40 +921,49 @@ document.addEventListener('DOMContentLoaded', () => {
             step1.classList.add('hidden');
             step2.classList.remove('hidden');
             previewsContainer.innerHTML = '';
+            
+            const isClosed = typeSelect.value === 'zamkniete';
 
+            // 1. Utwórz wszystkie "placeholdery" HTML w odpowiedniej kolejności
+            const placeholdersHtml = files.map((file, index) => `
+                <div class="task-preview-item" data-file-index="${index}">
+                    <img src="" class="task-preview-image" alt="Ładowanie podglądu..." data-index="${index}">
+                    <div class="task-preview-form">
+                        <div class="form-group">
+                            <label>Odpowiedź:</label>
+                            <input type="text" class="task-answer" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Punkty:</label>
+                            <input type="number" class="task-points" value="1" required>
+                        </div>
+                        ${isClosed ? `
+                        <div class="form-group">
+                            <label>Opcje (oddzielone średnikiem ";"):</label>
+                            <input type="text" class="task-options">
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+            previewsContainer.innerHTML = placeholdersHtml;
+
+            // 2. Wczytaj obrazy do placeholderów, zachowując kolejność
             files.forEach((file, index) => {
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    const isClosed = typeSelect.value === 'zamkniete';
-                    const previewHtml = `
-                        <div class="task-preview-item" data-file-index="${index}" data-file-name="${file.name}">
-                            <img src="${event.target.result}" class="task-preview-image" alt="Podgląd ${file.name}">
-                            <div class="task-preview-form">
-                                <div class="form-group">
-                                    <label>Odpowiedź:</label>
-                                    <input type="text" class="task-answer" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Punkty:</label>
-                                    <input type="number" class="task-points" value="1" required>
-                                </div>
-                                ${isClosed ? `
-                                <div class="form-group">
-                                    <label>Opcje (oddzielone średnikiem ";"):</label>
-                                    <input type="text" class="task-options">
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    `;
-                    previewsContainer.innerHTML += previewHtml;
+                    const imgElement = previewsContainer.querySelector(`img[data-index="${index}"]`);
+                    if (imgElement) {
+                        imgElement.src = event.target.result;
+                        imgElement.alt = `Podgląd ${file.name}`;
+                    }
                 };
                 reader.readAsDataURL(file);
             });
         });
 
         document.getElementById('cancel-upload-btn').addEventListener('click', () => {
-            fileInput.value = ''; // Reset file input
+            fileInput.value = '';
             step2.classList.add('hidden');
             step1.classList.remove('hidden');
         });
@@ -964,50 +973,41 @@ document.addEventListener('DOMContentLoaded', () => {
             const previewItems = document.querySelectorAll('.task-preview-item');
             const type = typeSelect.value;
             
-            // 1. Upload images
             const uploaded = await api.upload(files);
             if (!uploaded || uploaded.files.length !== files.length) {
                 alert('Wystąpił błąd podczas przesyłania plików. Spróbuj ponownie.');
                 return;
             }
 
-            // 2. Collect form data
             const tasksData = [];
             let allValid = true;
             previewItems.forEach((item, index) => {
+                if (!allValid) return; 
+
                 const answerInput = item.querySelector('.task-answer');
                 const pointsInput = item.querySelector('.task-points');
-                const optionsInput = item.querySelector('.task-options');
-
                 const answer = answerInput.value.trim();
-                const points = parseInt(pointsInput.value);
-
+                
                 if (!answer) {
-                    alert(`Uzupełnij odpowiedź dla zadania: ${item.dataset.fileName}`);
+                    alert(`Uzupełnij odpowiedź dla zadania numer ${index + 1}`);
                     answerInput.focus();
                     allValid = false;
                     return;
                 }
 
-                // Match uploaded file URL with form data
-                const uploadedFile = uploaded.files.find(f => f.filename.includes(item.dataset.fileName.split('.').slice(0, -1).join('.')));
-                if (!uploadedFile) {
-                    console.error('Could not find uploaded file for', item.dataset.fileName);
-                    return;
-                }
-
                 const task = {
                     type: type,
-                    tresc: uploadedFile.url,
+                    tresc: uploaded.files[index].url, // Użyj indeksu, aby zagwarantować kolejność
                     odpowiedz: answer,
-                    punkty: points,
+                    punkty: parseInt(pointsInput.value) || 1,
                     opcje: null
                 };
 
                 if (type === 'zamkniete') {
+                    const optionsInput = item.querySelector('.task-options');
                     const options = optionsInput.value.split(';').map(o => o.trim()).filter(o => o);
                     if (options.length === 0) {
-                        alert(`Uzupełnij opcje dla zadania zamkniętego: ${item.dataset.fileName}`);
+                        alert(`Uzupełnij opcje dla zadania zamkniętego numer ${index + 1}`);
                         optionsInput.focus();
                         allValid = false;
                         return;
@@ -1022,7 +1022,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 3. Send to bulk create endpoint
             const result = await api.request('/tasks/bulk', 'POST', { tasks: tasksData });
             if (result) {
                 alert(`Pomyślnie dodano ${result.count} zadań.`);
