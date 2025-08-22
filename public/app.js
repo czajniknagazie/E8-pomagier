@@ -654,11 +654,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span>Rozwiązanych zadań:</span>
                         <strong>${totalSolved}</strong>
                     </div>
-                    <div class="stat-item correct">
+                    <div class="stat-item correct-stats">
                         <span>Poprawnych:</span>
                         <strong>${totalCorrect}</strong>
                     </div>
-                    <div class="stat-item incorrect">
+                    <div class="stat-item incorrect-stats">
                         <span>Błędnych:</span>
                         <strong>${totalWrong}</strong>
                     </div>
@@ -713,8 +713,8 @@ document.addEventListener('DOMContentLoaded', () => {
         mainContent.innerHTML = `
             <h1>Zarządzanie zadaniami</h1>
             <div class="content-box wide">
-                <h2>Prześlij pliki zadań</h2>
-                <p>Krok 1: Wybierz i prześlij pliki graficzne zadań.</p>
+                <h2>Krok 1: Prześlij pliki zadań</h2>
+                <p>Wybierz i prześlij pliki graficzne zadań. Możesz zaznaczyć wiele plików naraz.</p>
                 <form id="task-upload-form">
                     <input type="file" id="task-image-upload" accept="image/*" multiple required>
                     <button type="submit" class="upload-btn">Prześlij pliki</button>
@@ -736,7 +736,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(filteredTasks);
         });
 
-        // Load existing tasks on initial view render
         const existingTasks = await api.request('/tasks');
         if (existingTasks) {
             document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(existingTasks);
@@ -753,59 +752,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const data = await api.upload(files);
         if (data && data.files) {
-            renderTaskCreationForms(data.files);
+            renderBulkTaskCreationForm(data.files);
         }
     }
 
-    function renderTaskCreationForms(uploadedFiles) {
+    function renderBulkTaskCreationForm(uploadedFiles) {
         const container = document.getElementById('task-forms-container');
         container.innerHTML = `
             <div class="content-box wide">
-                <h2>Dodaj szczegóły zadań</h2>
-                <p>Krok 2: Uzupełnij informacje dla każdego przesłanego pliku. Po uzupełnieniu kliknij "Zapisz zadanie".</p>
-                <div id="individual-task-forms">
-                    ${uploadedFiles.map((file, index) => `
-                        <div class="individual-task-form">
-                            <h3>Zadanie ${index + 1} (${file.filename})</h3>
-                            <img src="${file.url}" alt="Przesłane zadanie" class="upload-preview-image">
-                            <form class="create-task-form" data-image-url="${file.url}">
+                <h2>Krok 2: Uzupełnij szczegóły zadań</h2>
+                <p>Uzupełnij informacje dla wszystkich przesłanych zadań i zapisz je jednym kliknięciem.</p>
+                <form id="bulk-create-form">
+                    <div id="individual-task-forms">
+                        ${uploadedFiles.map((file, index) => `
+                            <div class="individual-task-form" data-task-index="${index}">
+                                <h3>Zadanie ${index + 1}</h3>
+                                <img src="${file.url}" alt="Przesłane zadanie" class="upload-preview-image">
+                                <input type="hidden" name="tresc" value="${file.url}">
                                 <label for="type-${index}">Typ zadania:</label>
                                 <select id="type-${index}" name="type" required>
                                     <option value="otwarte">Otwarte</option>
                                     <option value="zamkniete">Zamknięte</option>
                                 </select>
-
                                 <label for="odpowiedz-${index}">Poprawna odpowiedź:</label>
                                 <input type="text" id="odpowiedz-${index}" name="odpowiedz" required>
-                                
                                 <div class="options-group">
                                     <label for="opcje-${index}">Opcje (dla zamkniętych, rozdziel przecinkiem):</label>
                                     <input type="text" id="opcje-${index}" name="opcje">
                                 </div>
-                                
                                 <label for="punkty-${index}">Punkty:</label>
                                 <input type="number" id="punkty-${index}" name="punkty" value="1" required>
-
-                                <label for="arkusz-${index}">Arkusz:</label>
-                                <input type="text" id="arkusz-${index}" name="arkusz">
-
-                                <button type="submit" class="save-task-btn">Zapisz zadanie</button>
-                            </form>
-                        </div>
-                    `).join('')}
-                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button type="submit" class="save-all-btn">Dodaj wszystkie zadania</button>
+                </form>
             </div>
         `;
         
-        container.querySelectorAll('.create-task-form').forEach(form => {
-            form.addEventListener('submit', handleIndividualTaskSubmit);
-            // Toggle options input based on task type
-            const typeSelect = form.querySelector('select[name="type"]');
-            const optionsGroup = form.querySelector('.options-group');
-            if (typeSelect.value !== 'zamkniete') {
+        container.querySelectorAll('.individual-task-form select[name="type"]').forEach(select => {
+            const optionsGroup = select.closest('.individual-task-form').querySelector('.options-group');
+            if (select.value !== 'zamkniete') {
                 optionsGroup.style.display = 'none';
             }
-            typeSelect.addEventListener('change', (e) => {
+            select.addEventListener('change', (e) => {
                 if (e.target.value === 'zamkniete') {
                     optionsGroup.style.display = 'block';
                 } else {
@@ -813,30 +803,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         });
+        document.getElementById('bulk-create-form').addEventListener('submit', handleBulkTaskSubmit);
     }
 
-    async function handleIndividualTaskSubmit(e) {
+    async function handleBulkTaskSubmit(e) {
         e.preventDefault();
-        const form = e.target;
-        const tresc = form.dataset.imageUrl;
-        const type = form.querySelector('[name="type"]').value;
-        const odpowiedz = form.querySelector('[name="odpowiedz"]').value;
-        const opcjeInput = form.querySelector('[name="opcje"]').value;
-        const punkty = form.querySelector('[name="punkty"]').value;
-        const arkusz = form.querySelector('[name="arkusz"]').value;
+        const forms = document.querySelectorAll('#individual-task-forms .individual-task-form');
+        const tasksToSave = [];
         
-        const opcje = opcjeInput ? opcjeInput.split(',').map(s => s.trim()) : null;
-        
-        const data = { type, tresc, odpowiedz, opcje, punkty: Number(punkty), arkusz };
-        
-        const result = await api.request('/tasks', 'POST', data);
-        if (result && result.success) {
-            alert("Zadanie zostało pomyślnie dodane!");
-            form.innerHTML = `<p class="success-message">Zadanie dodane! ✅</p>`;
-            const existingTasks = await api.request('/tasks');
-            if (existingTasks) {
-                document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(existingTasks);
+        for (const form of forms) {
+            const tresc = form.querySelector('[name="tresc"]').value;
+            const type = form.querySelector('[name="type"]').value;
+            const odpowiedz = form.querySelector('[name="odpowiedz"]').value;
+            const punkty = form.querySelector('[name="punkty"]').value;
+            let opcje = null;
+
+            if (type === 'zamkniete') {
+                const opcjeInput = form.querySelector('[name="opcje"]').value;
+                opcje = opcjeInput ? opcjeInput.split(',').map(s => s.trim()) : null;
             }
+
+            if (!tresc || !type || !odpowiedz || !punkty) {
+                alert("Wszystkie pola muszą być wypełnione!");
+                return;
+            }
+
+            tasksToSave.push({ tresc, type, odpowiedz, opcje, punkty: Number(punkty) });
+        }
+
+        // Loop through each task and send a separate request to the single task endpoint
+        const successMessages = [];
+        for (const task of tasksToSave) {
+            const result = await api.request('/tasks', 'POST', task);
+            if (result && result.success) {
+                successMessages.push(`Zadanie o id #${result.id} zostało dodane.`);
+            }
+        }
+        
+        if (successMessages.length > 0) {
+            alert(`Pomyślnie dodano ${successMessages.length} zadań!`);
+            renderAdminTasks(); // Odświeżenie widoku
+        } else {
+            alert("Nie udało się dodać żadnych zadań.");
         }
     }
 
