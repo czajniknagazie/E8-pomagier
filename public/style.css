@@ -230,6 +230,41 @@ main {
     justify-content: space-between;
     margin-top: 20px;
 }
+.user-answer-box, .correct-answer-box {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--gray-mid);
+    background-color: var(--gray-light);
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+.grading-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+.grading-buttons button {
+    padding: 12px 20px;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 0.2s;
+}
+.grading-buttons button.correct {
+    background-color: #22c55e;
+    color: var(--white);
+}
+.grading-buttons button.incorrect {
+    background-color: var(--red);
+    color: var(--white);
+}
+.grading-buttons button:hover {
+    transform: scale(1.05);
+}
 
 /* --- Admin Panel & Lists --- */
 .item-list {
@@ -255,90 +290,36 @@ main {
     gap: 15px;
     align-items: center;
     padding: 10px;
-    border-bottom: 1px solid var(--gray-light);
-}
-.task-list-item:last-child {
-    border-bottom: none;
 }
 .task-list-item img {
-    width: 50px;
     height: 50px;
-    object-fit: cover;
+    width: auto;
     border-radius: 4px;
 }
-.bulk-upload-preview {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 20px;
-}
-.upload-item {
-    border: 1px solid var(--gray-mid);
-    padding: 10px;
-    border-radius: 8px;
-}
-.upload-item img {
-    max-width: 100%;
-    border-radius: 4px;
-    margin-bottom: 10px;
-}
-.upload-item label {
-    font-weight: bold;
-    font-size: 0.9rem;
-    display: block;
-    margin-top: 8px;
-}
-.upload-item input {
-    width: 95%;
-    padding: 8px;
-    border: 1px solid var(--gray-mid);
-    border-radius: 5px;
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
 }
 
-/* --- Stats --- */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 20px;
-}
-.stat-card {
-    background: var(--gray-light);
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-}
-.stat-card h3 {
-    margin-top: 0;
-}
-.stat-card .value {
-    font-size: 2.5rem;
-    font-weight: bold;
-}
-.stat-card .advice {
-    margin-top: 15px;
-    padding: 10px;
-    border-radius: 8px;
-    background-color: #e0e7ff;
-    color: #3730a3;
-    font-weight: bold;
-}
-
-/* NOWOŚĆ: Style dla urządzeń mobilnych */
+/* Mobile Nav */
 .menu-toggle-btn {
-    display: none; /* Ukryty na desktopie */
     position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 1001;
-    background: var(--nav-bg);
-    color: white;
-    border: none;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
     width: 40px;
     height: 40px;
-    border-radius: 50%;
+    background: rgba(0, 96, 22, 0.8);
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    padding: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
-
 .menu-toggle-btn .menu-icon,
 .menu-toggle-btn .menu-icon::before,
 .menu-toggle-btn .menu-icon::after {
@@ -383,30 +364,30 @@ main {
         flex-direction: column;
     }
     nav {
+        width: 100%;
         position: fixed;
-        left: 0;
         top: 0;
+        left: 0;
         height: 100%;
         transform: translateX(-100%);
-        z-index: 1000;
-        padding-top: 60px;
+        z-index: 99;
     }
-    nav.is-open {
+    nav.nav-visible {
         transform: translateX(0);
-    }
-    main {
-        width: 100%;
-        padding: 20px;
-        padding-top: 70px; /* Aby zrobić miejsce na przycisk */
     }
     .menu-toggle-btn {
         display: flex;
-        justify-content: center;
-        align-items: center;
     }
-    #exam-timer {
-        margin: -20px -20px 20px -20px;
-        top: -20px;
-        position: static;
+    #menu-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 98;
+    }
+    main {
+        padding-top: 70px;
     }
 }
