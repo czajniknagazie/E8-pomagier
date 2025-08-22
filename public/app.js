@@ -635,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
-// app.js - wklej w miejsce istniejącej funkcji renderStatsView
+    // Stats View
     async function renderStatsView() {
         const stats = await api.request('/stats');
         if (!stats) return;
