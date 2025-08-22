@@ -713,7 +713,15 @@ document.addEventListener('DOMContentLoaded', () => {
         mainContent.innerHTML = `
             <h1>Zarządzanie zadaniami</h1>
             <div class="content-box wide">
-                <h2>Krok 1: Prześlij pliki zadań</h2>
+                <h2>Krok 1: Wybierz typ zadań</h2>
+                <p>Określ, czy dodawane zadania są **otwarte** czy **zamknięte**.</p>
+                <div class="type-selection">
+                    <button id="select-otwarte-btn" class="type-btn">Zadania Otwarte</button>
+                    <button id="select-zamkniete-btn" class="type-btn">Zadania Zamknięte</button>
+                </div>
+            </div>
+            <div id="file-upload-container" class="content-box wide hidden">
+                <h2>Krok 2: Prześlij pliki zadań</h2>
                 <p>Wybierz i prześlij pliki graficzne zadań. Możesz zaznaczyć wiele plików naraz.</p>
                 <form id="task-upload-form">
                     <input type="file" id="task-image-upload" accept="image/*" multiple required>
@@ -728,6 +736,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     </ul>
             </div>
         `;
+
+        const fileUploadContainer = document.getElementById('file-upload-container');
+        document.getElementById('select-otwarte-btn').addEventListener('click', () => {
+            fileUploadContainer.dataset.taskType = 'otwarte';
+            fileUploadContainer.classList.remove('hidden');
+        });
+        document.getElementById('select-zamkniete-btn').addEventListener('click', () => {
+            fileUploadContainer.dataset.taskType = 'zamkniete';
+            fileUploadContainer.classList.remove('hidden');
+        });
 
         document.getElementById('task-upload-form').addEventListener('submit', handleTaskUpload);
         document.getElementById('admin-browse-search').addEventListener('input', async (e) => {
@@ -745,41 +763,45 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleTaskUpload(e) {
         e.preventDefault();
         const files = document.getElementById('task-image-upload').files;
+        const taskType = document.getElementById('file-upload-container').dataset.taskType;
+
         if (files.length === 0) {
             alert("Wybierz pliki do przesłania.");
+            return;
+        }
+        if (!taskType) {
+            alert("Najpierw wybierz typ zadań.");
             return;
         }
 
         const data = await api.upload(files);
         if (data && data.files) {
-            renderBulkTaskCreationForm(data.files);
+            renderBulkTaskCreationForm(data.files, taskType);
         }
     }
 
-    function renderBulkTaskCreationForm(uploadedFiles) {
+    function renderBulkTaskCreationForm(uploadedFiles, taskType) {
         const container = document.getElementById('task-forms-container');
+        const showOptions = taskType === 'zamkniete';
         container.innerHTML = `
             <div class="content-box wide">
-                <h2>Krok 2: Uzupełnij szczegóły zadań</h2>
+                <h2>Krok 3: Uzupełnij szczegóły zadań (${taskType === 'otwarte' ? 'Otwarte' : 'Zamknięte'})</h2>
                 <p>Uzupełnij informacje dla wszystkich przesłanych zadań i zapisz je jednym kliknięciem.</p>
-                <form id="bulk-create-form">
+                <form id="bulk-create-form" data-task-type="${taskType}">
                     <div id="individual-task-forms">
                         ${uploadedFiles.map((file, index) => `
                             <div class="individual-task-form" data-task-index="${index}">
                                 <h3>Zadanie ${index + 1}</h3>
                                 <img src="${file.url}" alt="Przesłane zadanie" class="upload-preview-image">
                                 <input type="hidden" name="tresc" value="${file.url}">
-                                <label for="type-${index}">Typ zadania:</label>
-                                <select id="type-${index}" name="type" required>
-                                    <option value="otwarte">Otwarte</option>
-                                    <option value="zamkniete">Zamknięte</option>
-                                </select>
                                 <label for="odpowiedz-${index}">Poprawna odpowiedź:</label>
                                 <input type="text" id="odpowiedz-${index}" name="odpowiedz" required>
-                                <div class="options-group">
-                                    <label for="opcje-${index}">Opcje (dla zamkniętych, rozdziel przecinkiem):</label>
-                                    <input type="text" id="opcje-${index}" name="opcje">
-                                </div>
+                                ${showOptions ? `
+                                    <div class="options-group">
+                                        <label for="opcje-${index}">Opcje (rozdziel przecinkiem):</label>
+                                        <input type="text" id="opcje-${index}" name="opcje" required>
+                                    </div>
+                                ` : ''}
                                 <label for="punkty-${index}">Punkty:</label>
                                 <input type="number" id="punkty-${index}" name="punkty" value="1" required>
                             </div>
@@ -790,48 +812,35 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         
-        container.querySelectorAll('.individual-task-form select[name="type"]').forEach(select => {
-            const optionsGroup = select.closest('.individual-task-form').querySelector('.options-group');
-            if (select.value !== 'zamkniete') {
-                optionsGroup.style.display = 'none';
-            }
-            select.addEventListener('change', (e) => {
-                if (e.target.value === 'zamkniete') {
-                    optionsGroup.style.display = 'block';
-                } else {
-                    optionsGroup.style.display = 'none';
-                }
-            });
-        });
         document.getElementById('bulk-create-form').addEventListener('submit', handleBulkTaskSubmit);
     }
 
     async function handleBulkTaskSubmit(e) {
         e.preventDefault();
+        const form = e.target;
+        const taskType = form.dataset.taskType;
         const forms = document.querySelectorAll('#individual-task-forms .individual-task-form');
         const tasksToSave = [];
         
-        for (const form of forms) {
-            const tresc = form.querySelector('[name="tresc"]').value;
-            const type = form.querySelector('[name="type"]').value;
-            const odpowiedz = form.querySelector('[name="odpowiedz"]').value;
-            const punkty = form.querySelector('[name="punkty"]').value;
+        for (const formElement of forms) {
+            const tresc = formElement.querySelector('[name="tresc"]').value;
+            const odpowiedz = formElement.querySelector('[name="odpowiedz"]').value;
+            const punkty = formElement.querySelector('[name="punkty"]').value;
             let opcje = null;
 
-            if (type === 'zamkniete') {
-                const opcjeInput = form.querySelector('[name="opcje"]').value;
+            if (taskType === 'zamkniete') {
+                const opcjeInput = formElement.querySelector('[name="opcje"]').value;
                 opcje = opcjeInput ? opcjeInput.split(',').map(s => s.trim()) : null;
             }
 
-            if (!tresc || !type || !odpowiedz || !punkty) {
+            if (!tresc || !odpowiedz || !punkty || (taskType === 'zamkniete' && !opcje)) {
                 alert("Wszystkie pola muszą być wypełnione!");
                 return;
             }
 
-            tasksToSave.push({ tresc, type, odpowiedz, opcje, punkty: Number(punkty) });
+            tasksToSave.push({ tresc, type: taskType, odpowiedz, opcje, punkty: Number(punkty) });
         }
 
-        // Loop through each task and send a separate request to the single task endpoint
         const successMessages = [];
         for (const task of tasksToSave) {
             const result = await api.request('/tasks', 'POST', task);
@@ -842,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (successMessages.length > 0) {
             alert(`Pomyślnie dodano ${successMessages.length} zadań!`);
-            renderAdminTasks(); // Odświeżenie widoku
+            renderAdminTasks();
         } else {
             alert("Nie udało się dodać żadnych zadań.");
         }
