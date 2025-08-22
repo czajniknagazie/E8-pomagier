@@ -500,7 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function endExam(saveProgress) {
         clearInterval(appState.examState.timer);
-        saveCurrentExamAnswer(); // Save the last answer
+        saveCurrentExamAnswer();
         
         if (!saveProgress) {
             appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null, examId: null, examName: '' };
@@ -525,7 +525,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const openTasks = appState.examState.tasks.filter(t => t.type === 'otwarte');
         const closedTasks = appState.examState.tasks.filter(t => t.type === 'zamkniete');
 
-        // Ocena zadań zamkniętych
         closedTasks.forEach(task => {
             const userAnswer = appState.examState.answers[task.id];
             if (userAnswer && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase()) {
@@ -535,7 +534,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // Doliczenie punktów z samooceny pytań otwartych
         correctCount += appState.examState.selfAssessedScore.correct;
         wrongCount += appState.examState.selfAssessedScore.wrong;
 
@@ -559,7 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(resultText);
         
         appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null, examId: null, examName: '' };
-        navigateTo('egzaminy'); // Navigate back to the exams list or stats view
+        navigateTo('egzaminy');
     }
     
     function renderExamSelfAssessment() {
@@ -685,40 +683,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let adminTasksHtml = `
             <div class="content-box wide">
-                <h2>Dodaj nowe zadania</h2>
-                <p>Możesz dodać zadanie ręcznie lub wrzucić arkusz z zadaniami w formie JSON.</p>
-                <label for="tasks-file-input" class="file-label">
-                    Wybierz plik JSON
-                    <input type="file" id="tasks-file-input" accept="application/json" class="hidden-input">
-                </label>
-                <button id="add-bulk-tasks" class="upload-btn">Dodaj zadania z pliku</button>
+                <h2>Dodaj nowe zadanie</h2>
+                <form id="create-task-form">
+                    <label for="task-type">Typ zadania:</label>
+                    <select id="task-type" required>
+                        <option value="otwarte">Otwarte</option>
+                        <option value="zamkniete">Zamknięte</option>
+                    </select>
+
+                    <label for="task-tresc">Treść zadania (URL obrazu):</label>
+                    <input type="url" id="task-tresc" required>
+                    
+                    <label for="task-odpowiedz">Poprawna odpowiedź:</label>
+                    <input type="text" id="task-odpowiedz" required>
+
+                    <label for="task-opcje">Opcje (dla zamkniętych, rozdziel przecinkiem):</label>
+                    <input type="text" id="task-opcje">
+
+                    <label for="task-punkty">Punkty:</label>
+                    <input type="number" id="task-punkty" value="1" required>
+
+                    <label for="task-arkusz">Arkusz:</label>
+                    <input type="text" id="task-arkusz">
+
+                    <button type="submit" class="upload-btn">Dodaj zadanie</button>
+                </form>
             </div>`;
 
         mainContent.innerHTML = `<h1>Zarządzanie zadaniami</h1>${adminTasksHtml}`;
+        document.getElementById('create-task-form').addEventListener('submit', handleCreateTask);
 
-        document.getElementById('add-bulk-tasks').addEventListener('click', async () => {
-            const file = document.getElementById('tasks-file-input').files[0];
-            if (!file) {
-                alert("Wybierz plik JSON.");
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const tasks = JSON.parse(e.target.result);
-                    const result = await api.request('/tasks/bulk', 'POST', { tasks });
-                    if (result && result.success) {
-                        alert(`Pomyślnie dodano ${result.count} zadań.`);
-                        renderAdminTasks(); // Reload view
-                    }
-                } catch (err) {
-                    alert('Błąd wczytywania pliku JSON: ' + err.message);
-                }
-            };
-            reader.readAsText(file);
-        });
-
-        // Add task list below
         const taskListHtml = `
             <div class="content-box wide">
                 <h2>Wszystkie zadania</h2>
@@ -734,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const taskId = e.target.dataset.taskId;
                 if (confirm(`Czy na pewno chcesz usunąć zadanie #${taskId}?`)) {
                     await api.request(`/tasks/${taskId}`, 'DELETE');
-                    renderAdminTasks(); // Reload view
+                    renderAdminTasks();
                 }
             }
         });
@@ -744,6 +738,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const filteredTasks = await api.request(`/tasks?search=${search}`);
             document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(filteredTasks);
         });
+    }
+    
+    async function handleCreateTask(e) {
+        e.preventDefault();
+        const type = document.getElementById('task-type').value;
+        const tresc = document.getElementById('task-tresc').value;
+        const odpowiedz = document.getElementById('task-odpowiedz').value;
+        const opcjeInput = document.getElementById('task-opcje').value;
+        const punkty = document.getElementById('task-punkty').value;
+        const arkusz = document.getElementById('task-arkusz').value;
+
+        const opcje = opcjeInput ? opcjeInput.split(',').map(s => s.trim()) : null;
+
+        const data = { type, tresc, odpowiedz, opcje, punkty, arkusz };
+
+        const result = await api.request('/tasks', 'POST', data);
+        if (result && result.success) {
+            alert("Zadanie zostało pomyślnie dodane!");
+            renderAdminTasks(); // Odświeżenie widoku
+        }
     }
 
     function renderAdminTasksList(tasks) {

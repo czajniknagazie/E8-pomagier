@@ -71,6 +71,22 @@ app.get("/api/tasks", auth(), (req, res) => {
     res.json(tasks);
 });
 
+// NOWOŚĆ: Endpoint do dodawania pojedynczego zadania (przywrócony)
+app.post("/api/tasks", auth("admin"), (req, res) => {
+  const { type, tresc, odpowiedz, opcje, punkty, arkusz } = req.body || {};
+  if (!type || !tresc || !odpowiedz) return res.status(400).json({ error: "Brak wymaganych danych: typ, treść lub odpowiedź." });
+
+  try {
+    const info = db.prepare(`
+      INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(type, tresc, odpowiedz, opcje ? JSON.stringify(opcje) : null, Number(punkty) || 1, arkusz || null);
+    res.json({ success: true, id: info.lastInsertRowid });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.get("/api/tasks/random", auth(), (req, res) => {
     const { type, mode } = req.query;
     let query;
@@ -109,7 +125,7 @@ app.post("/api/solved", auth(), (req, res) => {
   }
 });
 
-// NOWOŚĆ: Endpoint do resetowania wszystkich postępów
+// --- Resetowanie postępów (pozostawione) ---
 app.delete("/api/solved", auth(), (req, res) => {
   const user = req.user.name;
   try {
@@ -120,7 +136,6 @@ app.delete("/api/solved", auth(), (req, res) => {
   }
 });
 
-// NOWOŚĆ: Endpoint do resetowania tylko błędnych zadań
 app.delete("/api/solved/wrong", auth(), (req, res) => {
   const user = req.user.name;
   try {
@@ -150,28 +165,7 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   res.json({ success: true, files });
 });
 
-// --- Bulk Task Creation ---
-app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
-  const { tasks } = req.body || {};
-  if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
-  const ins = db.prepare(`INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES (@type, @tresc, @odpowiedz, @opcje, @punkty, @arkusz)`);
-  const trx = db.transaction((arr) => {
-    for (const t of arr) {
-      ins.run({
-        type: t.type,
-        tresc: t.tresc,
-        odpowiedz: t.odpowiedz,
-        opcje: t.opcje ? JSON.stringify(t.opcje) : null,
-        punkty: Number(t.punkty) || 1,
-        arkusz: t.arkusz || null,
-      });
-    }
-  });
-  trx(tasks);
-  res.json({ success: true, count: tasks.length });
-});
-
-// --- Usuwanie zadań ---
+// --- Usuwanie zadań (pozostawione) ---
 app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
   const { id } = req.params;
   try {
