@@ -282,7 +282,6 @@ body {
     margin-top: 20px;
 }
 
-/* Nowe style dla arkusza osiągnięć */
 .stats-container {
     display: flex;
     flex-wrap: wrap;
@@ -296,28 +295,37 @@ body {
     flex: 1;
     min-width: 250px;
 }
-.general-stats .stat-item {
-    padding: 10px 15px;
-    border-radius: 6px;
-    margin-bottom: 10px;
+.stat-item {
+    padding: 10px 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid var(--gray-light);
 }
-.correct-stats {
-    background-color: #dcfce7;
-    border: 2px solid #22c55e;
+.stat-item:last-child {
+    border-bottom: none;
 }
-.incorrect-stats {
-    background-color: #fee2e2;
-    border: 2px solid #ef4444;
+.stat-item strong {
+    font-size: 1.1em;
 }
-.correct-stats strong, .correct-stats span {
-    color: #16a34a;
+
+/* Nowe style dla wskaźników procentowych */
+.percent-circle {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
 }
-.incorrect-stats strong, .incorrect-stats span {
-    color: #b91c1c;
+
+.percent-circle.correct {
+    background-color: #22c55e;
 }
+
+.percent-circle.incorrect {
+    background-color: #ef4444;
+}
+
 .exam-results-list {
     list-style: none;
     padding: 0;
@@ -335,13 +343,16 @@ body {
 .exam-header strong {
     font-size: 1.1em;
 }
-.exam-score span {
-    font-weight: bold;
+.exam-score {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.exam-score strong {
     font-size: 1.2em;
     color: var(--text-color);
 }
 .exam-score small {
-    display: block;
     font-size: 0.8em;
     color: var(--gray-dark);
 }

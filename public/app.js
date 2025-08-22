@@ -635,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     }
 
-    // Stats View
+// app.js - wklej w miejsce istniejącej funkcji renderStatsView
     async function renderStatsView() {
         const stats = await api.request('/stats');
         if (!stats) return;
@@ -645,40 +645,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalCorrect = generalStats.total_correct || 0;
         const totalWrong = generalStats.total_wrong || 0;
         const percentCorrect = totalSolved > 0 ? ((totalCorrect / totalSolved) * 100).toFixed(1) : 0;
+        const totalTasksInDb = await api.request('/tasks/count');
 
         let statsHtml = `
             <div class="stats-container">
-                <div class="stats-card general-stats">
+                <div class="stats-card">
                     <h2>Podsumowanie ogólne</h2>
+                    <div class="stat-item">
+                        <span>Liczba wszystkich zadań w bazie:</span>
+                        <strong>${totalTasksInDb.count}</strong>
+                    </div>
                     <div class="stat-item">
                         <span>Rozwiązanych zadań:</span>
                         <strong>${totalSolved}</strong>
                     </div>
-                    <div class="stat-item correct-stats">
-                        <span>Poprawnych:</span>
-                        <strong>${totalCorrect}</strong>
-                    </div>
-                    <div class="stat-item incorrect-stats">
-                        <span>Błędnych:</span>
-                        <strong>${totalWrong}</strong>
-                    </div>
-                    <div class="stat-item">
-                        <span>Skuteczność:</span>
-                        <strong>${percentCorrect}%</strong>
-                    </div>
                 </div>`;
-
+        
         if (typeStats.length) {
-            statsHtml += `<div class="stats-card type-stats">
+            statsHtml += `<div class="stats-card type-stats-card">
                 <h2>Statystyki według typu</h2>
                 ${typeStats.map(s => {
                     const totalType = s.correct + s.wrong;
                     const typePercent = totalType > 0 ? ((s.correct / totalType) * 100).toFixed(1) : 0;
                     return `<div class="type-item">
                         <h3>${s.type === 'zamkniete' ? 'Zamknięte' : 'Otwarte'}</h3>
-                        <p>Poprawnych: ${s.correct}</p>
-                        <p>Błędnych: ${s.wrong}</p>
-                        <p>Skuteczność: ${typePercent}%</p>
+                        <p>Skuteczność: <span class="percent-circle ${typePercent > 50 ? 'correct' : 'incorrect'}"></span> <strong>${typePercent}%</strong> (${s.correct}/${s.correct + s.wrong})</p>
                     </div>`;
                 }).join('')}
             </div>`;
@@ -692,11 +683,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li>
                             <div class="exam-header">
                                 <strong>${e.exam_name}</strong>
-                                <small>(${e.correct}/${e.total} pkt.)</small>
                             </div>
                             <div class="exam-score">
-                                <span>${e.percent}%</span>
-                                <small>Rozwiązano: ${new Date(e.created_at).toLocaleString()}</small>
+                                <span class="percent-circle ${e.percent > 50 ? 'correct' : 'incorrect'}"></span>
+                                <strong>${e.percent}%</strong>
+                                <small>(${e.correct}/${e.total})</small>
                             </div>
                         </li>
                     `).join('')}
