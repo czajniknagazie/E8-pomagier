@@ -404,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', (e) => {
                 const examId = e.target.dataset.examId;
                 const examName = e.target.dataset.examName;
-                const action = e.target.dataset.dataset.action;
+                const action = e.target.dataset.action;
                 if (action === 'start') {
                     startExam(examId, examName);
                 } else if (action === 'review') {
@@ -641,122 +641,202 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!stats) return;
 
         const { generalStats, typeStats, solvedExams } = stats;
+        const totalSolved = generalStats.total_solved || 0;
+        const totalCorrect = generalStats.total_correct || 0;
+        const totalWrong = generalStats.total_wrong || 0;
+        const percentCorrect = totalSolved > 0 ? ((totalCorrect / totalSolved) * 100).toFixed(1) : 0;
 
         let statsHtml = `
-            <div class="content-box stats-box">
-                <h2>Statystyki ogólne</h2>
-                <p><strong>Rozwiązane zadania:</strong> ${generalStats.total_solved || 0}</p>
-                <p class="correct"><strong>Poprawne:</strong> ${generalStats.total_correct || 0}</p>
-                <p class="incorrect"><strong>Błędne:</strong> ${generalStats.total_wrong || 0}</p>
-            </div>`;
-        
+            <div class="stats-container">
+                <div class="stats-card general-stats">
+                    <h2>Podsumowanie ogólne</h2>
+                    <div class="stat-item">
+                        <span>Rozwiązanych zadań:</span>
+                        <strong>${totalSolved}</strong>
+                    </div>
+                    <div class="stat-item correct">
+                        <span>Poprawnych:</span>
+                        <strong>${totalCorrect}</strong>
+                    </div>
+                    <div class="stat-item incorrect">
+                        <span>Błędnych:</span>
+                        <strong>${totalWrong}</strong>
+                    </div>
+                    <div class="stat-item">
+                        <span>Skuteczność:</span>
+                        <strong>${percentCorrect}%</strong>
+                    </div>
+                </div>`;
+
         if (typeStats.length) {
-            statsHtml += `<div class="content-box stats-box">
+            statsHtml += `<div class="stats-card type-stats">
                 <h2>Statystyki według typu</h2>
-                ${typeStats.map(s => `
-                    <p><strong>${s.type === 'zamkniete' ? 'Zamknięte' : 'Otwarte'}:</strong> Poprawne: ${s.correct}, Błędne: ${s.wrong}</p>
-                `).join('')}
+                ${typeStats.map(s => {
+                    const totalType = s.correct + s.wrong;
+                    const typePercent = totalType > 0 ? ((s.correct / totalType) * 100).toFixed(1) : 0;
+                    return `<div class="type-item">
+                        <h3>${s.type === 'zamkniete' ? 'Zamknięte' : 'Otwarte'}</h3>
+                        <p>Poprawnych: ${s.correct}</p>
+                        <p>Błędnych: ${s.wrong}</p>
+                        <p>Skuteczność: ${typePercent}%</p>
+                    </div>`;
+                }).join('')}
             </div>`;
         }
 
         if (solvedExams.length) {
-            statsHtml += `<div class="content-box stats-box">
-                <h2>Ostatnie egzaminy</h2>
-                <ul class="item-list exam-results-list">
+            statsHtml += `<div class="stats-card exam-results-stats">
+                <h2>Wyniki z egzaminów</h2>
+                <ul class="exam-results-list">
                     ${solvedExams.map(e => `
                         <li>
-                            <span><strong>${e.exam_name}</strong> - ${e.percent}% (${e.correct}/${e.total})</span>
-                            <small>${new Date(e.created_at).toLocaleString()}</small>
+                            <div class="exam-header">
+                                <strong>${e.exam_name}</strong>
+                                <small>(${e.correct}/${e.total} pkt.)</small>
+                            </div>
+                            <div class="exam-score">
+                                <span>${e.percent}%</span>
+                                <small>Rozwiązano: ${new Date(e.created_at).toLocaleString()}</small>
+                            </div>
                         </li>
                     `).join('')}
                 </ul>
             </div>`;
         }
-
+        
+        statsHtml += `</div>`;
         mainContent.innerHTML = `<h1>Arkusz osiągnięć</h1>${statsHtml}`;
     }
 
     // Admin Views
     async function renderAdminTasks() {
-        const tasks = await api.request('/tasks');
-        if (!tasks) return;
-
-        let adminTasksHtml = `
+        mainContent.innerHTML = `
+            <h1>Zarządzanie zadaniami</h1>
             <div class="content-box wide">
-                <h2>Dodaj nowe zadanie</h2>
-                <form id="create-task-form">
-                    <label for="task-type">Typ zadania:</label>
-                    <select id="task-type" required>
-                        <option value="otwarte">Otwarte</option>
-                        <option value="zamkniete">Zamknięte</option>
-                    </select>
-
-                    <label for="task-tresc">Treść zadania (URL obrazu):</label>
-                    <input type="url" id="task-tresc" required>
-                    
-                    <label for="task-odpowiedz">Poprawna odpowiedź:</label>
-                    <input type="text" id="task-odpowiedz" required>
-
-                    <label for="task-opcje">Opcje (dla zamkniętych, rozdziel przecinkiem):</label>
-                    <input type="text" id="task-opcje">
-
-                    <label for="task-punkty">Punkty:</label>
-                    <input type="number" id="task-punkty" value="1" required>
-
-                    <label for="task-arkusz">Arkusz:</label>
-                    <input type="text" id="task-arkusz">
-
-                    <button type="submit" class="upload-btn">Dodaj zadanie</button>
+                <h2>Prześlij pliki zadań</h2>
+                <p>Krok 1: Wybierz i prześlij pliki graficzne zadań.</p>
+                <form id="task-upload-form">
+                    <input type="file" id="task-image-upload" accept="image/*" multiple required>
+                    <button type="submit" class="upload-btn">Prześlij pliki</button>
                 </form>
-            </div>`;
-
-        mainContent.innerHTML = `<h1>Zarządzanie zadaniami</h1>${adminTasksHtml}`;
-        document.getElementById('create-task-form').addEventListener('submit', handleCreateTask);
-
-        const taskListHtml = `
+            </div>
+            <div id="task-forms-container"></div>
             <div class="content-box wide">
                 <h2>Wszystkie zadania</h2>
                 <input type="text" id="admin-browse-search" placeholder="Szukaj po ID lub arkuszu..." class="search-input">
                 <ul id="admin-tasks-list" class="item-list">
-                    ${renderAdminTasksList(tasks)}
-                </ul>
-            </div>`;
-        mainContent.innerHTML += taskListHtml;
+                    </ul>
+            </div>
+        `;
 
-        mainContent.addEventListener('click', async (e) => {
-            if (e.target.dataset.action === 'delete') {
-                const taskId = e.target.dataset.taskId;
-                if (confirm(`Czy na pewno chcesz usunąć zadanie #${taskId}?`)) {
-                    await api.request(`/tasks/${taskId}`, 'DELETE');
-                    renderAdminTasks();
-                }
-            }
-        });
-
+        document.getElementById('task-upload-form').addEventListener('submit', handleTaskUpload);
         document.getElementById('admin-browse-search').addEventListener('input', async (e) => {
             const search = e.target.value;
             const filteredTasks = await api.request(`/tasks?search=${search}`);
             document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(filteredTasks);
         });
+
+        // Load existing tasks on initial view render
+        const existingTasks = await api.request('/tasks');
+        if (existingTasks) {
+            document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(existingTasks);
+        }
     }
-    
-    async function handleCreateTask(e) {
+
+    async function handleTaskUpload(e) {
         e.preventDefault();
-        const type = document.getElementById('task-type').value;
-        const tresc = document.getElementById('task-tresc').value;
-        const odpowiedz = document.getElementById('task-odpowiedz').value;
-        const opcjeInput = document.getElementById('task-opcje').value;
-        const punkty = document.getElementById('task-punkty').value;
-        const arkusz = document.getElementById('task-arkusz').value;
+        const files = document.getElementById('task-image-upload').files;
+        if (files.length === 0) {
+            alert("Wybierz pliki do przesłania.");
+            return;
+        }
 
+        const data = await api.upload(files);
+        if (data && data.files) {
+            renderTaskCreationForms(data.files);
+        }
+    }
+
+    function renderTaskCreationForms(uploadedFiles) {
+        const container = document.getElementById('task-forms-container');
+        container.innerHTML = `
+            <div class="content-box wide">
+                <h2>Dodaj szczegóły zadań</h2>
+                <p>Krok 2: Uzupełnij informacje dla każdego przesłanego pliku. Po uzupełnieniu kliknij "Zapisz zadanie".</p>
+                <div id="individual-task-forms">
+                    ${uploadedFiles.map((file, index) => `
+                        <div class="individual-task-form">
+                            <h3>Zadanie ${index + 1} (${file.filename})</h3>
+                            <img src="${file.url}" alt="Przesłane zadanie" class="upload-preview-image">
+                            <form class="create-task-form" data-image-url="${file.url}">
+                                <label for="type-${index}">Typ zadania:</label>
+                                <select id="type-${index}" name="type" required>
+                                    <option value="otwarte">Otwarte</option>
+                                    <option value="zamkniete">Zamknięte</option>
+                                </select>
+
+                                <label for="odpowiedz-${index}">Poprawna odpowiedź:</label>
+                                <input type="text" id="odpowiedz-${index}" name="odpowiedz" required>
+                                
+                                <div class="options-group">
+                                    <label for="opcje-${index}">Opcje (dla zamkniętych, rozdziel przecinkiem):</label>
+                                    <input type="text" id="opcje-${index}" name="opcje">
+                                </div>
+                                
+                                <label for="punkty-${index}">Punkty:</label>
+                                <input type="number" id="punkty-${index}" name="punkty" value="1" required>
+
+                                <label for="arkusz-${index}">Arkusz:</label>
+                                <input type="text" id="arkusz-${index}" name="arkusz">
+
+                                <button type="submit" class="save-task-btn">Zapisz zadanie</button>
+                            </form>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        
+        container.querySelectorAll('.create-task-form').forEach(form => {
+            form.addEventListener('submit', handleIndividualTaskSubmit);
+            // Toggle options input based on task type
+            const typeSelect = form.querySelector('select[name="type"]');
+            const optionsGroup = form.querySelector('.options-group');
+            if (typeSelect.value !== 'zamkniete') {
+                optionsGroup.style.display = 'none';
+            }
+            typeSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'zamkniete') {
+                    optionsGroup.style.display = 'block';
+                } else {
+                    optionsGroup.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    async function handleIndividualTaskSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const tresc = form.dataset.imageUrl;
+        const type = form.querySelector('[name="type"]').value;
+        const odpowiedz = form.querySelector('[name="odpowiedz"]').value;
+        const opcjeInput = form.querySelector('[name="opcje"]').value;
+        const punkty = form.querySelector('[name="punkty"]').value;
+        const arkusz = form.querySelector('[name="arkusz"]').value;
+        
         const opcje = opcjeInput ? opcjeInput.split(',').map(s => s.trim()) : null;
-
-        const data = { type, tresc, odpowiedz, opcje, punkty, arkusz };
-
+        
+        const data = { type, tresc, odpowiedz, opcje, punkty: Number(punkty), arkusz };
+        
         const result = await api.request('/tasks', 'POST', data);
         if (result && result.success) {
             alert("Zadanie zostało pomyślnie dodane!");
-            renderAdminTasks(); // Odświeżenie widoku
+            form.innerHTML = `<p class="success-message">Zadanie dodane! ✅</p>`;
+            const existingTasks = await api.request('/tasks');
+            if (existingTasks) {
+                document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(existingTasks);
+            }
         }
     }
 
