@@ -43,105 +43,213 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.error || "Coś poszło nie tak");
+                    throw new Error(error.error || 'Wystąpił błąd');
                 }
-                
-                if (response.status === 204) {
-                    return { success: true };
-                }
-
-                return await response.json();
-
-            } catch (error) {
-                console.error("Błąd API:", error);
-                alert(`Błąd: ${error.message}`);
+                if (response.status === 204) return null;
+                return response.json();
+            } catch (err) {
+                alert(`Błąd API: ${err.message}`);
                 return null;
             }
         },
+        async upload(files) {
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${appState.token}` },
+                    body: formData
+                });
+                if (response.status === 401) {
+                    alert("Twoja sesja wygasła lub jest nieprawidłowa. Zaloguj się ponownie.");
+                    logout();
+                    return null;
+                }
+                if (!response.ok) throw new Error('Błąd wysyłania plików.');
+                return response.json();
+            } catch (err) {
+                 alert(`Błąd API: ${err.message}`);
+                return null;
+            }
+        }
     };
 
-    // --- UTILS ---
+    // --- INITIALIZATION ---
+    function init() {
+        setupLoginListeners();
+        const savedToken = localStorage.getItem('e8-token');
+        const savedUser = localStorage.getItem('e8-user');
+        if (savedToken && savedUser) {
+            appState.token = savedToken;
+            appState.user = JSON.parse(savedUser);
+            showApp();
+        } else {
+            showLogin();
+        }
+    }
+
+    // --- AUTH & UI TOGGLING ---
+    function setupLoginListeners() {
+        document.getElementById('student-login-form').addEventListener('submit', handleStudentLogin);
+        document.getElementById('admin-login-form').addEventListener('submit', handleAdminLogin);
+        document.getElementById('show-admin-login').addEventListener('click', () => toggleLoginView(true));
+        document.getElementById('show-student-login').addEventListener('click', () => toggleLoginView(false));
+    }
+    
+    function toggleLoginView(showAdmin) {
+        document.getElementById('student-login-view').classList.toggle('hidden', showAdmin);
+        document.getElementById('admin-login-view').classList.toggle('hidden', !showAdmin);
+    }
+
+    async function handleStudentLogin(e) {
+        e.preventDefault();
+        const name = document.getElementById('student-name').value;
+        const data = await api.request('/login-student', 'POST', { name });
+        if (data) {
+            login(data);
+        }
+    }
+    
+    async function handleAdminLogin(e) {
+        e.preventDefault();
+        const name = document.getElementById('admin-name').value;
+        const code = document.getElementById('admin-code').value;
+        const data = await api.request('/admin/login', 'POST', { name, code });
+        if (data) {
+            login(data);
+        }
+    }
+
+    function login(data) {
+        appState.token = data.token;
+        appState.user = { name: data.name, role: data.role };
+        localStorage.setItem('e8-token', data.token);
+        localStorage.setItem('e8-user', JSON.stringify(appState.user));
+        showApp();
+    }
+
+    function logout() {
+        localStorage.removeItem('e8-token');
+        localStorage.removeItem('e8-user');
+        window.location.reload();
+    }
+
+    function showLogin() {
+        loginContainer.classList.remove('hidden');
+        appContainer.classList.add('hidden');
+    }
+
+    function showApp() {
+        loginContainer.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        document.getElementById('zalogowany-jako').textContent = `Zalogowano jako: ${appState.user.name}`;
+        
+        const adminNav = document.getElementById('admin-panel-nav');
+        if (appState.user.role === 'admin') {
+            adminNav.classList.remove('hidden');
+        } else {
+            adminNav.classList.add('hidden');
+        }
+
+        setupNavigation(); // Centralna funkcja do obsługi nawigacji
+        document.getElementById('logout-btn').addEventListener('click', logout);
+        navigateTo('wszystkie');
+    }
+
+    // --- NAVIGATION ---
+    function setupNavigation() {
+        const navEl = document.getElementById('main-nav');
+        const menuToggle = document.getElementById('menu-toggle');
+        const menuOverlay = document.getElementById('menu-overlay');
+
+        const closeMenu = () => {
+            navEl.classList.remove('nav-visible');
+            menuOverlay.classList.add('hidden');
+        };
+
+        // Listener dla przycisków w panelu nawigacji
+        navEl.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON' && e.target.dataset.view) {
+                // Jeśli menu mobilne jest otwarte, zamknij je po kliknięciu
+                if (navEl.classList.contains('nav-visible')) {
+                    closeMenu();
+                }
+                navigateTo(e.target.dataset.view);
+            }
+        });
+
+        // Listenery dla mobilnego menu (hamburger i tło)
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navEl.classList.add('nav-visible');
+            menuOverlay.classList.remove('hidden');
+        });
+
+        menuOverlay.addEventListener('click', closeMenu);
+    }
+
+
     function navigateTo(view) {
+        if (appState.examState.active && !view.startsWith('exam-')) {
+            if (!confirm('Czy na pewno chcesz opuścić egzamin? Twoje postępy nie zostaną zapisane.')) {
+                return;
+            }
+            endExam(false);
+        }
         appState.currentView = view;
-        switch (view) {
-            case 'login':
-                renderLoginView();
-                break;
-            case 'main':
-                renderMainView();
-                break;
-            case 'nauka':
-                renderNaukaView();
-                break;
-            case 'losowe-zadanie':
-                renderRandomTaskView('wszystkie');
+        renderView(view);
+    }
+
+    // --- VIEW RENDERING ---
+    async function renderView(view) {
+        mainContent.innerHTML = `<h1>Ładowanie...</h1>`;
+        switch(view) {
+            case 'wszystkie':
+            case 'zamkniete':
+            case 'otwarte':
+                await renderRandomTaskView(view);
                 break;
             case 'egzaminy':
-                renderExamsView();
+                await renderExamsList();
                 break;
-            case 'stats':
-                renderStatsView();
+            case 'przegladaj':
+                await renderBrowseTasks();
                 break;
-            case 'settings':
-                renderSettingsView();
+            case 'statystyki':
+                await renderStatsView();
+                break;
+            case 'admin-zadania':
+                if (appState.user.role === 'admin') await renderAdminTasks();
+                break;
+            case 'admin-egzaminy':
+                 if (appState.user.role === 'admin') await renderAdminExams();
+                break;
+            case 'exam-start':
+                await renderExamTask();
+                break;
+            case 'exam-review':
+                await renderExamReviewTask();
+                break;
+            case 'exam-results':
+                await renderExamResultsView();
                 break;
         }
     }
 
-    function logout() {
-        appState.token = null;
-        appState.user = { name: '', role: '' };
-        localStorage.removeItem('token');
-        navigateTo('login');
-    }
-
-    // --- RENDERERS ---
-
-    function renderLoginView() {
-        loginContainer.style.display = 'flex';
-        appContainer.style.display = 'none';
-        
-        document.getElementById('login-form').addEventListener('submit', handleLogin);
-        document.getElementById('register-form').addEventListener('submit', handleRegister);
-    }
-
-    function renderMainView() {
-        loginContainer.style.display = 'none';
-        appContainer.style.display = 'flex';
-        mainContent.innerHTML = `
-            <h1>Witaj, ${appState.user.name}!</h1>
-            <div class="content-box">
-                <p>Jesteś zalogowany jako ${appState.user.role}.</p>
-            </div>`;
-    }
-
-    function renderNaukaView() {
-        mainContent.innerHTML = `
-            <h1>Nauka i zadania</h1>
-            <div class="content-box">
-                <p>Wybierz tryb nauki:</p>
-                <div class="nauka-options">
-                    <button id="losowe-btn" class="nauka-btn" data-type="wszystkie">Wszystkie zadania</button>
-                    <button id="zamkniete-btn" class="nauka-btn" data-type="zamkniete">Zadania zamknięte</button>
-                    <button id="otwarte-btn" class="nauka-btn" data-type="otwarte">Zadania otwarte</button>
-                </div>
-            </div>`;
-
-        document.querySelectorAll('.nauka-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                const type = button.dataset.type;
-                appState.currentView = 'losowe-zadanie';
-                renderRandomTaskView(type);
-            });
-        });
-    }
-
+    // --- STUDENT VIEWS ---
+    
+    // Random Task Mode
     async function renderRandomTaskView(type) {
         const typeName = { wszystkie: 'Wszystkie zadania', zamkniete: 'Zadania zamknięte', otwarte: 'Zadania otwarte' }[type];
         mainContent.innerHTML = `<h1>${typeName}</h1>`;
-
+        
+        // Sprawdź, czy istnieje tryb treningu błędów
         const practiceMode = appState.currentView === 'practice-incorrect';
-        const task = await api.request(`/tasks/random?type=${type}&incorrect=${practiceMode}`);
+
+        const task = await api.request(`/tasks/random?type=${type}&incorrect=${practiceMode}`); // Zaktualizowana ścieżka API
 
         appState.currentTask = task;
 
@@ -189,221 +297,218 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('task-form').addEventListener('submit', handleCheckAnswer);
     }
 
-    async function handleCheckAnswer(e) {
+    function handleCheckAnswer(e) {
         e.preventDefault();
-        const resultBox = document.getElementById('result-box');
         const task = appState.currentTask;
-
         let userAnswer;
+        let isCorrect = false;
+
         if (task.type === 'zamkniete') {
             const selected = document.querySelector('input[name="answer"]:checked');
-            userAnswer = selected ? selected.value : '';
-        } else {
-            userAnswer = document.getElementById('open-answer').value;
-        }
-
-        const isCorrect = (task.type === 'zamkniete' && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase());
-
-        const response = await api.request('/solved', 'POST', {
-            taskId: task.id,
-            isCorrect: isCorrect ? 1 : 0
-        });
-
-        if (response) {
-            if (isCorrect) {
-                resultBox.innerHTML = `<p class="correct">👍 Dobra robota! Poprawna odpowiedź!</p>`;
-            } else {
-                resultBox.innerHTML = `<p class="incorrect">👎 Niestety, błędna odpowiedź. Poprawna to: <strong>${task.odpowiedz}</strong></p>`;
+            if (!selected) {
+                alert('Wybierz odpowiedź!');
+                return;
             }
-
-            const form = document.getElementById('task-form');
-            form.innerHTML += `<button id="next-task-btn" type="button">Następne zadanie</button>`;
-            document.getElementById('next-task-btn').addEventListener('click', () => {
-                renderRandomTaskView(task.type);
+            userAnswer = selected.value;
+            isCorrect = userAnswer.toLowerCase() === task.odpowiedz.toLowerCase();
+            showResult(isCorrect, task.odpowiedz);
+            api.request('/solved', 'POST', { taskId: task.id, isCorrect });
+        } else { // otwarte
+            userAnswer = document.getElementById('open-answer').value;
+            if (!userAnswer) {
+                alert('Wpisz odpowiedź!');
+                return;
+            }
+            const resultBox = document.getElementById('result-box');
+            resultBox.innerHTML = `
+                <div class="result-box">
+                    <p><strong>Twoja odpowiedź:</strong> ${userAnswer}</p>
+                    <p><strong>Poprawna odpowiedź:</strong> ${task.odpowiedz}</p>
+                    <p>Oceń swoją odpowiedź:</p>
+                    <button id="self-assess-correct">Było dobrze</button>
+                    <button id="self-assess-incorrect">Było źle</button>
+                </div>
+            `;
+            document.getElementById('self-assess-correct').addEventListener('click', () => {
+                showResult(true, null, true);
+                api.request('/solved', 'POST', { taskId: task.id, isCorrect: true });
+            });
+            document.getElementById('self-assess-incorrect').addEventListener('click', () => {
+                showResult(false, null, true);
+                api.request('/solved', 'POST', { taskId: task.id, isCorrect: false });
             });
         }
     }
+    
+    function showResult(isCorrect, correctAnswer, isSelfAssessed = false) {
+        const resultBox = document.getElementById('result-box');
+        document.querySelector('#task-form button[type="submit"]').disabled = true;
+
+        if (isCorrect) {
+            resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
+        } else {
+            let text = ` Błędna odpowiedź.`;
+            if (correctAnswer) text += ` Poprawna to: <strong>${correctAnswer}</strong>`;
+            resultBox.innerHTML = `<div class="result-box incorrect">${text}</div>`;
+        }
+
+        if (isSelfAssessed) {
+             resultBox.innerHTML += `<p>Dziękujemy za ocenę!</p>`;
+        }
+        
+        resultBox.innerHTML += `<button id="next-task-btn">Następne zadanie</button>`;
+        document.getElementById('next-task-btn').addEventListener('click', () => renderView(appState.currentView));
+    }
 
     async function handleResetProgress() {
-        if (confirm('Jesteś pewien, że chcesz zresetować postępy? Spowoduje to usunięcie wszystkich Twoich rozwiązań.')) {
-            const response = await api.request('/solved/reset', 'POST');
-            if (response.success) {
-                alert('Postępy zostały zresetowane.');
-                navigateTo('nauka');
+        const isConfirmed = confirm("Czy na pewno chcesz zresetować swoje postępy? Wszystkie rozwiązane zadania zostaną oznaczone jako nierozwiązane, ale Twoje wyniki z egzaminów pozostaną nietknięte.");
+
+        if (isConfirmed) {
+            const result = await api.request('/solved', 'DELETE');
+            if (result && result.success) {
+                alert("Twoje postępy zostały zresetowane!");
+                navigateTo(appState.currentView); // Reload view to get a new task
             }
         }
     }
 
-    async function renderExamsView() {
-        mainContent.innerHTML = `
-            <h1>Egzaminy</h1>
-            <div class="content-box">
-                <div class="exam-actions">
-                    <button id="create-exam-btn" class="action-btn">Stwórz nowy egzamin</button>
-                </div>
-            </div>
-            <div class="content-box">
-                <h2>Twoje egzaminy</h2>
-                <div id="exams-list">Ładowanie egzaminów...</div>
-            </div>
-            <div class="content-box">
-                <h2>Rozwiązane egzaminy</h2>
-                <div id="solved-exams-list">Ładowanie wyników...</div>
-            </div>
-        `;
-
-        document.getElementById('create-exam-btn').addEventListener('click', () => navigateTo('create-exam'));
-        
-        const examsList = document.getElementById('exams-list');
-        const solvedExamsList = document.getElementById('solved-exams-list');
-        
+    // Exams List
+    async function renderExamsList() {
         const exams = await api.request('/exams');
-        if (exams) {
-            if (exams.length > 0) {
-                examsList.innerHTML = `
-                    <ul class="clean-list">
-                        ${exams.map(exam => `
-                            <li>
-                                <strong>${exam.name}</strong> (${exam.tasks} zadań)<br>
-                                <small>Arkusz: ${exam.arkusz_name}</small>
-                                <button class="start-exam-btn" data-exam-id="${exam.id}">Rozpocznij</button>
-                            </li>
-                        `).join('')}
-                    </ul>`;
-                document.querySelectorAll('.start-exam-btn').forEach(btn => {
-                    btn.addEventListener('click', () => startExam(btn.dataset.examId));
-                });
-            } else {
-                examsList.innerHTML = '<p>Brak dostępnych egzaminów.</p>';
-            }
+        let examsHtml = `<ul class="item-list">`;
+        if (exams && exams.length) {
+            examsHtml += exams.map(exam => `
+                <li class="list-item">
+                    <span><strong>${exam.name}</strong></span>
+                    <div class="exam-action-buttons">
+                        <button data-exam-id="${exam.id}" data-exam-name="${exam.name}" data-action="start">Rozpocznij egzamin</button>
+                        <button data-exam-id="${exam.id}" data-exam-name="${exam.name}" data-action="review">Przeglądaj</button>
+                    </div>
+                </li>
+            `).join('');
+        } else {
+            examsHtml += `<p>Brak dostępnych egzaminów.</p>`;
         }
+        examsHtml += `</ul>`;
+        mainContent.innerHTML = `<h1>Wybierz Egzamin</h1><div class="content-box">${examsHtml}</div>`;
 
-        const solvedExams = await api.request('/results');
-        if (solvedExams) {
-            if (solvedExams.length > 0) {
-                solvedExamsList.innerHTML = `
-                    <ul class="clean-list">
-                        ${solvedExams.map(result => `
-                            <li>
-                                <strong>${result.exam_name}</strong> - Wynik: ${result.correct} / ${result.total} (${result.percent.toFixed(0)}%)
-                                <br><small>Zadania zamknięte: ${result.closed_correct}/${result.closed_correct + result.closed_wrong}</small>
-                                <br><small>Zadania otwarte: ${result.open_correct}/${result.open_correct + result.open_wrong}</small>
-                            </li>
-                        `).join('')}
-                    </ul>`;
-            } else {
-                solvedExamsList.innerHTML = '<p>Brak rozwiązanych egzaminów.</p>';
-            }
-        }
+        mainContent.querySelectorAll('button[data-exam-id]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const examId = e.target.dataset.examId;
+                const examName = e.target.dataset.examName;
+                const action = e.target.dataset.action;
+                if (action === 'start') {
+                    startExam(examId, examName);
+                } else if (action === 'review') {
+                    startExamReview(examId, examName);
+                }
+            });
+        });
     }
     
-    async function startExam(examId) {
-        const exam = await api.request(`/exams/${examId}`);
-        if (!exam) return;
-
-        appState.examState = {
-            active: true,
-            examId: exam.id,
-            examName: exam.name,
-            tasks: JSON.parse(exam.tasks),
-            currentIndex: 0,
-            answers: {},
-            timer: null
-        };
-
-        renderExamTask();
-        startExamTimer();
-    }
-
-    function startExamTimer() {
-        const timerElement = document.getElementById('exam-timer');
-        let totalSeconds = 0;
-        appState.examState.timer = setInterval(() => {
-            totalSeconds++;
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            timerElement.textContent = `Czas: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }, 1000);
-    }
-
-    function renderExamTask() {
-        if (!appState.examState.active) return;
-        
-        const { tasks, currentIndex, answers } = appState.examState;
-        if (currentIndex >= tasks.length) {
-            endExam(true);
+    // Exam Mode
+    async function startExam(examId, examName) {
+        const examData = await api.request(`/exams/${examId}`);
+        if (!examData || !examData.tasks.length) {
+            alert('Ten egzamin jest pusty lub nie można go załadować.');
             return;
         }
 
+        appState.examState = {
+            active: true,
+            tasks: examData.tasks,
+            currentIndex: 0,
+            answers: {},
+            timer: null,
+            examId,
+            examName,
+            // Nowe pola do oceny zadań otwartych
+            openTasksToGrade: [],
+            gradedOpenTasks: {}
+        };
+
+        const timerDuration = 125 * 60;
+        let timeLeft = timerDuration;
+        
+        appState.examState.timer = setInterval(() => {
+            timeLeft--;
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            const timerEl = document.getElementById('exam-timer');
+            if (timerEl) {
+                timerEl.textContent = `Pozostały czas: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+            if (timeLeft <= 0) {
+                endExam(true);
+            }
+        }, 1000);
+
+        navigateTo('exam-start');
+    }
+
+    function renderExamTask() {
+        const { tasks, currentIndex, answers } = appState.examState;
         const task = tasks[currentIndex];
-        const taskType = task.type === 'zamkniete' ? 'Zadanie zamknięte' : 'Zadanie otwarte';
 
         let answerHtml = '';
+        const savedAnswer = answers[task.id];
+
         if (task.type === 'zamkniete') {
-            const currentAnswer = answers[task.id] || '';
-            answerHtml = `
-                <div class="task-options">
-                    ${task.opcje.map(opt => `
-                        <label>
-                            <input type="radio" name="exam-answer-${task.id}" value="${opt}" ${currentAnswer === opt ? 'checked' : ''}>
-                            ${opt}
-                        </label>
-                    `).join('')}
-                </div>`;
+            answerHtml = `<div class="task-options">
+                ${task.opcje.map(opt => `
+                    <label><input type="radio" name="answer" value="${opt}" ${savedAnswer === opt ? 'checked' : ''}> ${opt}</label>
+                `).join('')}
+            </div>`;
         } else {
-            const currentAnswer = answers[task.id] || '';
-            answerHtml = `<textarea id="open-answer" class="task-input" rows="5" placeholder="Wpisz swoją odpowiedź...">${currentAnswer}</textarea>`;
+            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź...">${savedAnswer || ''}</textarea>`;
         }
-
-        mainContent.innerHTML = `
-            <h1>Egzamin: ${appState.examState.examName}</h1>
-            <div class="exam-controls">
-                <span id="exam-timer">Czas: 00:00</span>
-                <span>Zadanie ${currentIndex + 1} z ${tasks.length}</span>
-            </div>
+        
+        const examHtml = `
+            <div id="exam-timer"></div>
+            <h1>Egzamin: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
             <div class="content-box">
-                <p><strong>${taskType} #${task.id} (${task.punkty} pkt.)</strong></p>
+                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
                 <img src="${task.tresc}" alt="Treść zadania" class="task-image">
-                <form id="exam-task-form">
+                <div id="exam-form">
                     ${answerHtml}
-                    <div class="exam-navigation">
-                        <button type="button" id="prev-task-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
-                        <button type="submit" id="next-task-btn">${currentIndex === tasks.length - 1 ? 'Zakończ egzamin' : 'Następne'}</button>
-                    </div>
-                </form>
-            </div>
-        `;
-        document.getElementById('exam-task-form').addEventListener('submit', handleExamNavigation);
-        document.getElementById('prev-task-btn').addEventListener('click', handleExamNavigation);
+                </div>
+                <div class="exam-navigation">
+                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
+                    <span></span>
+                    <button id="next-btn">${currentIndex === tasks.length - 1 ? 'Zakończ egzamin' : 'Następne'}</button>
+                </div>
+            </div>`;
+        mainContent.innerHTML = examHtml;
+        document.getElementById('prev-btn').addEventListener('click', () => navigateExam(-1));
+        document.getElementById('next-btn').addEventListener('click', () => navigateExam(1));
     }
-    
-    function saveCurrentExamAnswer() {
-        const { tasks, currentIndex, answers } = appState.examState;
-        const currentTask = tasks[currentIndex];
 
+    function navigateExam(direction) {
+        saveCurrentExamAnswer();
+        const newIndex = appState.examState.currentIndex + direction;
+        if (newIndex < 0 || newIndex > appState.examState.tasks.length) return;
+        if (newIndex === appState.examState.tasks.length) {
+            endExam(true);
+        } else {
+            appState.examState.currentIndex = newIndex;
+            renderExamTask();
+        }
+    }
+
+    function saveCurrentExamAnswer() {
+        const task = appState.examState.tasks[appState.examState.currentIndex];
         let userAnswer;
-        if (currentTask.type === 'zamkniete') {
-            const selected = document.querySelector(`input[name="exam-answer-${currentTask.id}"]:checked`);
-            userAnswer = selected ? selected.value : '';
+        if (task.type === 'zamkniete') {
+            const selected = document.querySelector('input[name="answer"]:checked');
+            userAnswer = selected ? selected.value : undefined;
         } else {
             userAnswer = document.getElementById('open-answer').value;
         }
-        answers[currentTask.id] = userAnswer;
+        if (userAnswer) {
+            appState.examState.answers[task.id] = userAnswer;
+        }
     }
 
-    function handleExamNavigation(e) {
-        e.preventDefault();
-        saveCurrentExamAnswer();
-        
-        const action = e.target.id;
-        if (action === 'prev-task-btn') {
-            appState.examState.currentIndex--;
-        } else {
-            appState.examState.currentIndex++;
-        }
-        renderExamTask();
-    }
-    
     async function endExam(isFinished) {
         clearInterval(appState.examState.timer);
         if (isFinished) {
@@ -423,6 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            // Rozpoczęcie procesu oceny zadań otwartych
             appState.examState.closedCorrect = closedCorrect;
             appState.examState.closedWrong = closedWrong;
             appState.examState.openTasksToGrade = openTasks;
@@ -523,86 +629,308 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('back-to-exams').addEventListener('click', () => navigateTo('egzaminy'));
     }
 
-    async function renderStatsView() {
-        mainContent.innerHTML = '<h1>Statystyki</h1><div id="stats-content" class="content-box">Ładowanie statystyk...</div>';
-        const statsContent = document.getElementById('stats-content');
-        const stats = await api.request('/stats');
-
-        if (stats) {
-            const closedTotal = stats.closedStats.correct + stats.closedStats.wrong;
-            const openTotal = stats.openStats.correct + stats.openStats.wrong;
-            const closedPercent = closedTotal > 0 ? (stats.closedStats.correct / closedTotal * 100) : 0;
-            const openPercent = openTotal > 0 ? (stats.openStats.correct / openTotal * 100) : 0;
-
-            statsContent.innerHTML = `
-                <h2>Ogólne statystyki</h2>
-                <p>Łącznie rozwiązanych zadań: ${stats.generalStats.total_solved}</p>
-                <p>Poprawne: ${stats.generalStats.total_correct}</p>
-                <p>Błędne: ${stats.generalStats.total_wrong}</p>
-                
-                <h2>Statystyki wg typów</h2>
-                <p><strong>Zadania zamknięte:</strong></p>
-                <p>Poprawne: ${stats.closedStats.correct} / ${closedTotal} (${closedPercent.toFixed(0)}%)</p>
-                <p>Błędne: ${stats.closedStats.wrong} / ${closedTotal} (${(100 - closedPercent).toFixed(0)}%)</p>
-                
-                <p><strong>Zadania otwarte:</strong></p>
-                <p>Poprawne: ${stats.openStats.correct} / ${openTotal} (${openPercent.toFixed(0)}%)</p>
-                <p>Błędne: ${stats.openStats.wrong} / ${openTotal} (${(100 - openPercent).toFixed(0)}%)</p>
-            `;
+    // --- New Review Mode ---
+    async function startExamReview(examId, examName) {
+        const examData = await api.request(`/exams/${examId}`);
+        if (!examData || !examData.tasks.length) {
+            alert('Ten egzamin jest pusty lub nie można go załadować.');
+            return;
+        }
+        appState.examState = { active: true, tasks: examData.tasks, currentIndex: 0, answers: {}, timer: null, examId, examName };
+        navigateTo('exam-review');
+    }
+    
+    function renderExamReviewTask() {
+        const { tasks, currentIndex } = appState.examState;
+        const task = tasks[currentIndex];
+        let answerHtml = '';
+        if (task.type === 'zamkniete') {
+            answerHtml = `
+                <div class="task-options">
+                    ${task.opcje.map(opt => `
+                        <label>
+                            <input type="radio" name="answer" value="${opt}">
+                            ${opt}
+                        </label>
+                    `).join('')}
+                </div>`;
         } else {
-            statsContent.innerHTML = '<p>Brak statystyk do wyświetlenia.</p>';
+            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
+        }
+        const taskHtml = `
+            <h1>Przeglądanie: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
+            <div class="content-box">
+                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
+                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
+                <form id="task-review-form">
+                    ${answerHtml}
+                    <button type="submit">Sprawdź</button>
+                </form>
+                <div id="result-box"></div>
+                <div class="exam-navigation">
+                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
+                    <span></span>
+                    <button id="next-btn" ${currentIndex === tasks.length - 1 ? 'disabled' : ''}>Następne</button>
+                </div>
+            </div>`;
+        mainContent.innerHTML = taskHtml;
+        const form = document.getElementById('task-review-form');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const task = appState.examState.tasks[appState.examState.currentIndex];
+            let userAnswer;
+            if (task.type === 'zamkniete') {
+                const selected = form.querySelector('input[name="answer"]:checked');
+                userAnswer = selected ? selected.value : '';
+            } else {
+                userAnswer = form.querySelector('#open-answer').value;
+            }
+            const isCorrect = userAnswer.toLowerCase() === task.odpowiedz.toLowerCase();
+            showReviewResult(isCorrect, task.odpowiedz);
+            form.querySelector('button[type="submit"]').disabled = true;
+            if (task.type === 'zamkniete') {
+                form.querySelectorAll('input').forEach(input => input.disabled = true);
+            }
+        });
+        document.getElementById('prev-btn').addEventListener('click', () => navigateExamReview(-1));
+        document.getElementById('next-btn').addEventListener('click', () => navigateExamReview(1));
+    }
+
+    function navigateExamReview(direction) {
+        const newIndex = appState.examState.currentIndex + direction;
+        if (newIndex >= 0 && newIndex < appState.examState.tasks.length) {
+            appState.examState.currentIndex = newIndex;
+            renderExamReviewTask();
         }
     }
 
-    async function renderSettingsView() {
-        mainContent.innerHTML = `
-            <h1>Ustawienia</h1>
-            <div class="content-box">
-                <p>Tutaj możesz zmienić ustawienia swojego konta.</p>
-                <button id="logout-btn">Wyloguj</button>
-            </div>
-        `;
-        document.getElementById('logout-btn').addEventListener('click', logout);
+    function showReviewResult(isCorrect, correctAnswer) {
+        const resultBox = document.getElementById('result-box');
+        if (isCorrect) {
+            resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
+        } else {
+            resultBox.innerHTML = `<div class="result-box incorrect">Błędna odpowiedź. Poprawna to: <strong>${correctAnswer}</strong></div>`;
+        }
     }
-    
-    async function renderCreateExamView() {
-        mainContent.innerHTML = `
-            <h1>Stwórz nowy egzamin</h1>
+
+    // --- Stats View ---
+    async function renderStatsView() {
+        mainContent.innerHTML = '<h1>Statystyki</h1><p>Ładowanie danych...</p>';
+        const stats = await api.request('/stats');
+        if (!stats) return;
+
+        let statsHtml = `
             <div class="content-box">
-                <form id="create-exam-form">
-                    <label for="new-exam-name">Nazwa egzaminu:</label>
-                    <input type="text" id="new-exam-name" required>
-                    <label for="new-exam-arkusz">Nazwa arkusza:</label>
-                    <input type="text" id="new-exam-arkusz" required>
-                    <h2>Wybierz zadania</h2>
-                    <div id="exam-tasks-list">Ładowanie zadań...</div>
-                    <button type="submit" class="action-btn">Utwórz egzamin</button>
+                <h2>Ogólne statystyki</h2>
+                <p>Rozwiązane zadania: <strong>${stats.generalStats.total_solved || 0}</strong></p>
+                <p>Poprawne odpowiedzi: <strong>${stats.generalStats.total_correct || 0}</strong></p>
+                <p>Błędne odpowiedzi: <strong>${stats.generalStats.total_wrong || 0}</strong></p>
+            </div>
+            <div class="content-box">
+                <h2>Statystyki według typu zadania</h2>
+                <ul>
+                    <li><strong>Zamknięte:</strong> ${stats.typeStats.zamkniete?.correct || 0} dobrych, ${stats.typeStats.zamkniete?.wrong || 0} błędnych</li>
+                    <li><strong>Otwarte:</strong> ${stats.typeStats.otwarte?.correct || 0} dobrych, ${stats.typeStats.otwarte?.wrong || 0} błędnych</li>
+                </ul>
+            </div>
+            <div class="content-box">
+                <h2>Wyniki z egzaminów</h2>
+                <ul class="item-list">`;
+        
+        if (stats.solvedExams.length) {
+            statsHtml += stats.solvedExams.map(exam => `
+                <li class="list-item">
+                    <span><strong>${exam.exam_name}</strong> - ${exam.correct}/${exam.total} (${exam.percent.toFixed(0)}%)</span>
+                </li>
+            `).join('');
+        } else {
+            statsHtml += `<li>Brak rozwiązanych egzaminów.</li>`;
+        }
+
+        statsHtml += `</ul></div>`;
+        mainContent.innerHTML = `<h1>Statystyki</h1>${statsHtml}`;
+    }
+
+    // --- ADMIN VIEWS ---
+    
+    // Admin Tasks
+    async function renderAdminTasks() {
+        const tasks = await api.request('/tasks');
+        let tasksHtml = `<div class="content-box wide">
+            <div class="admin-tasks-controls">
+                <input type="text" id="task-search-input" placeholder="Szukaj po ID lub arkuszu..." style="width: 50%;">
+                <button id="search-tasks-btn">Szukaj</button>
+                <button id="clear-search-btn">Wyczyść</button>
+            </div>
+            <ul class="item-list">`;
+        if (tasks && tasks.length) {
+             tasksHtml += tasks.map(task => `
+                <li class="list-item">
+                    <img src="${task.tresc}" alt="Miniatura" style="height: 50px; width: auto; border-radius: 4px;">
+                    <div>
+                        <strong>Zadanie #${task.id}</strong><br>
+                        <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                    </div>
+                    <button class="delete-task-btn" data-id="${task.id}">Usuń</button>
+                </li>
+             `).join('');
+        } else {
+            tasksHtml += `<p>Brak zadań.</p>`;
+        }
+        tasksHtml += `</ul></div>`;
+        
+        // Formularz dodawania zadań
+        tasksHtml += `
+            <div class="content-box">
+                <h2>Dodaj nowe zadania</h2>
+                <p>Wgraj obrazki zadań. Nazwa pliku to typ (zamkniete/otwarte), a następnie treść odpowiedzi, np. 'zamkniete_OdpowiedzA.png', 'otwarte_OdpowiedzB.png'</p>
+                <form id="upload-form">
+                    <input type="file" id="task-files" multiple required>
+                    <button type="submit">Wgraj</button>
                 </form>
             </div>
         `;
-
-        const tasksList = document.getElementById('exam-tasks-list');
-        const tasks = await api.request('/tasks');
         
-        if (tasks && tasks.length > 0) {
-            tasksList.innerHTML = `
-            <ul class="task-select-list">
-                ${tasks.map(task => `
-                    <li class="task-list-item">
-                        <input type="checkbox" value="${task.id}" style="transform: scale(1.5);">
-                        <img src="${task.tresc}" alt="Miniatura">
-                        <div>
-                            <strong>Zadanie #${task.id}</strong><br>
-                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
-                        </div>
-                    </li>
-                `).join('')}
-            </ul>`;
-            
-        document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
+        mainContent.innerHTML = `<h1>Panel Administracyjny: Zarządzanie zadaniami</h1>${tasksHtml}`;
+
+        document.getElementById('upload-form').addEventListener('submit', handleTaskUpload);
+        document.querySelectorAll('.delete-task-btn').forEach(btn => btn.addEventListener('click', handleDeleteTask));
+        document.getElementById('task-search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') renderAdminTasksSearch();
+        });
+        document.getElementById('search-tasks-btn').addEventListener('click', renderAdminTasksSearch);
+        document.getElementById('clear-search-btn').addEventListener('click', () => navigateTo('admin-zadania'));
+    }
+    
+    async function renderAdminTasksSearch() {
+        const search = document.getElementById('task-search-input').value;
+        const tasks = await api.request(`/tasks?search=${encodeURIComponent(search)}`);
+        // Odtworzenie widoku z wynikami wyszukiwania
+        let tasksHtml = `<div class="content-box wide">
+            <div class="admin-tasks-controls">
+                <input type="text" id="task-search-input" placeholder="Szukaj po ID lub arkuszu..." value="${search}">
+                <button id="search-tasks-btn">Szukaj</button>
+                <button id="clear-search-btn">Wyczyść</button>
+            </div>
+            <ul class="item-list">`;
+        if (tasks && tasks.length) {
+            tasksHtml += tasks.map(task => `
+                <li class="list-item">
+                    <img src="${task.tresc}" alt="Miniatura" style="height: 50px; width: auto; border-radius: 4px;">
+                    <div>
+                        <strong>Zadanie #${task.id}</strong><br>
+                        <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                    </div>
+                    <button class="delete-task-btn" data-id="${task.id}">Usuń</button>
+                </li>
+            `).join('');
         } else {
-            tasksList.innerHTML = '<p>Brak dostępnych zadań.</p>';
+            tasksHtml += `<p>Brak zadań pasujących do kryteriów wyszukiwania.</p>`;
         }
+        tasksHtml += `</ul></div>`;
+        mainContent.innerHTML = `<h1>Panel Administracyjny: Zarządzanie zadaniami</h1>${tasksHtml}`;
+        document.getElementById('upload-form').addEventListener('submit', handleTaskUpload);
+        document.querySelectorAll('.delete-task-btn').forEach(btn => btn.addEventListener('click', handleDeleteTask));
+        document.getElementById('task-search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') renderAdminTasksSearch();
+        });
+        document.getElementById('search-tasks-btn').addEventListener('click', renderAdminTasksSearch);
+        document.getElementById('clear-search-btn').addEventListener('click', () => navigateTo('admin-zadania'));
+    }
+
+    async function handleTaskUpload(e) {
+        e.preventDefault();
+        const files = document.getElementById('task-files').files;
+        if (!files.length) return alert('Wybierz pliki do wgrania.');
+
+        const uploaded = await api.upload(files);
+        if (!uploaded) return;
+
+        const tasksData = uploaded.files.map(file => {
+            const parts = file.filename.split(/_(.+)/);
+            if (parts.length < 2) {
+                console.error('Nieprawidłowa nazwa pliku:', file.filename);
+                return null;
+            }
+            const type = parts[0];
+            const answerPart = parts[1].replace(path.extname(parts[1]), '');
+            
+            const task = {
+                type: type === 'zamkniete' ? 'zamkniete' : 'otwarte',
+                tresc: file.url,
+                odpowiedz: answerPart
+            };
+            if (task.type === 'zamkniete') {
+                task.opcje = [answerPart]; // Pusta lista opcji do uzupełnienia ręcznie
+            }
+            return task;
+        }).filter(t => t !== null);
+
+        const result = await api.request('/tasks/bulk', 'POST', { tasks: tasksData });
+        if (result) {
+            alert(`Pomyślnie dodano ${result.count} zadań.`);
+            navigateTo('admin-zadania');
+        }
+    }
+    
+    async function handleDeleteTask(e) {
+        const taskId = e.target.dataset.id;
+        if (confirm(`Czy na pewno chcesz usunąć zadanie #${taskId}?`)) {
+            const result = await api.request(`/tasks/${taskId}`, 'DELETE');
+            if (result !== null) {
+                alert(`Zadanie #${taskId} zostało usunięte.`);
+                navigateTo('admin-zadania');
+            }
+        }
+    }
+    
+    // Admin Exams
+    async function renderAdminExams() {
+        const exams = await api.request('/exams');
+        const tasks = await api.request('/tasks'); // Pobierz listę wszystkich zadań
+        let examsHtml = `<div class="content-box wide">
+            <h2>Utwórz nowy arkusz egzaminacyjny</h2>
+            <form id="create-exam-form">
+                <input type="text" id="new-exam-name" placeholder="Nazwa egzaminu" required>
+                <input type="text" id="new-exam-arkusz" placeholder="Nazwa arkusza" required>
+                <h3>Wybierz zadania:</h3>
+                <div class="task-list-container">
+                    <ul id="exam-tasks-list" class="item-list task-list">
+                        ${tasks.map(task => `
+                            <li class="list-item">
+                                <input type="checkbox" value="${task.id}" style="transform: scale(1.5);">
+                                <img src="${task.tresc}" alt="Miniatura">
+                                <div>
+                                    <strong>Zadanie #${task.id}</strong><br>
+                                    <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                                </div>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                <button type="submit">Utwórz egzamin</button>
+            </form>
+        </div>`;
+        
+        examsHtml += `<div class="content-box">
+            <h2>Istniejące egzaminy</h2>
+            <ul class="item-list">`;
+        if (exams && exams.length) {
+            examsHtml += exams.map(exam => `
+                <li class="list-item">
+                    <span><strong>${exam.name}</strong> (${JSON.parse(exam.tasks || '[]').length} zadań)</span>
+                    <button class="delete-exam-btn" data-id="${exam.id}">Usuń</button>
+                </li>
+            `).join('');
+        } else {
+            examsHtml += `<p>Brak dostępnych egzaminów.</p>`;
+        }
+        examsHtml += `</ul></div>`;
+
+        mainContent.innerHTML = `<h1>Panel Administracyjny: Egzaminy</h1>${examsHtml}`;
+        
+        document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
+        document.querySelectorAll('.delete-exam-btn').forEach(btn => btn.addEventListener('click', handleDeleteExam));
     }
 
     async function handleCreateExam(e) {
@@ -620,34 +948,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = await api.request('/exams', 'POST', { name, taskIds, arkuszName });
         if (result) {
             alert(`Pomyślnie utworzono egzamin "${name}".`);
-            navigateTo('egzaminy');
+            navigateTo('admin-egzaminy');
         }
     }
 
-    // --- INITIALIZATION ---
-    function init() {
-        const token = localStorage.getItem('token');
-        if (token) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                appState.token = token;
-                appState.user = { name: payload.name, role: payload.role };
-                navigateTo('main');
-            } catch (e) {
-                console.error("Invalid token:", e);
-                navigateTo('login');
+    async function handleDeleteExam(e) {
+        const examId = e.target.dataset.id;
+        if (confirm(`Czy na pewno chcesz usunąć egzamin #${examId}?`)) {
+            const result = await api.request(`/exams/${examId}`, 'DELETE');
+            if (result !== null) {
+                alert(`Egzamin #${examId} został usunięty.`);
+                navigateTo('admin-egzaminy');
             }
-        } else {
-            navigateTo('login');
         }
-
-        document.getElementById('nav-main-btn').addEventListener('click', () => navigateTo('main'));
-        document.getElementById('nav-nauka-btn').addEventListener('click', () => navigateTo('nauka'));
-        document.getElementById('nav-egzaminy-btn').addEventListener('click', () => navigateTo('egzaminy'));
-        document.getElementById('nav-stats-btn').addEventListener('click', () => navigateTo('stats'));
-        document.getElementById('nav-settings-btn').addEventListener('click', () => navigateTo('settings'));
-        document.getElementById('logout-btn-nav').addEventListener('click', logout);
     }
 
+    // --- Inicjalizacja ---
     init();
+
 });
