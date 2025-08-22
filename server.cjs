@@ -67,8 +67,7 @@ app.get("/api/tasks", auth(), (req, res) => {
         params.push(`%${search}%`, `%${search}%`);
     }
     query += ' ORDER BY id DESC';
-    const tasks = db.prepare(query).all(params).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null
-    }));
+    const tasks = db.prepare(query).all(params).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
     res.json(tasks);
 });
 
@@ -109,6 +108,44 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     res.json(task || null);
 });
 
+// --- NOWY ENDPOINT: Dodawanie pojedynczego zadania z plikiem ---
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/[^\w.-]/g, "_");
+    cb(null, `${Date.now()}_${base}${ext}`);
+  }
+});
+const upload = multer({ storage });
+
+app.post("/api/tasks", auth("admin"), upload.single('file'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "Brak przesłanego pliku." });
+    }
+
+    const { arkusz, type, punkty, odpowiedz, opcje } = req.body;
+    const tresc = `/uploads/${req.file.filename}`;
+
+    try {
+        const stmt = db.prepare(`
+            INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        const result = stmt.run(
+            type,
+            tresc,
+            odpowiedz,
+            opcje,
+            Number(punkty) || 1,
+            arkusz
+        );
+        res.json({ success: true, taskId: result.lastInsertRowid });
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera podczas dodawania zadania: " + e.message });
+    }
+});
+
 // --- Solved Tasks ---
 app.post("/api/solved", auth(), (req, res) => {
   const { taskId, isCorrect } = req.body || {};
@@ -125,7 +162,6 @@ app.post("/api/solved", auth(), (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
-
 // NOWOŚĆ: Endpoint do resetowania postępów
 app.delete("/api/solved", auth(), (req, res) => {
   const user = req.user.name;
@@ -136,9 +172,8 @@ app.delete("/api/solved", auth(), (req, res) => {
     res.status(500).json({ error: "Błąd serwera podczas resetowania postępów: " + e.message });
   }
 });
-
 // --- Image Upload ---
-const storage = multer.diskStorage({
+const bulkStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || ".png";
@@ -146,16 +181,15 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}_${base}${ext}`);
   }
 });
-const upload = multer({ storage });
+const bulkUpload = multer({ storage: bulkStorage });
 
-app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => {
+app.post("/api/upload", auth("admin"), bulkUpload.array("files", 50), (req, res) => {
   const files = (req.files || []).map(f => ({
     filename: f.filename,
     url: `/uploads/${f.filename}`
   }));
   res.json({ success: true, files });
 });
-
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   const { tasks } = req.body || {};
@@ -178,7 +212,6 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   trx(tasks);
   res.json({ success: true, count: tasks.length });
 });
-
 // --- Usuwanie zadań ---
 app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
     const { id } = req.params;
@@ -193,7 +226,6 @@ app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
 // --- Exams ---
 app.get("/api/exams", auth(), (req, res) => {
   const list = db.prepare("SELECT id, name FROM exams ORDER BY name ASC").all();
@@ -226,8 +258,7 @@ app.post("/api/exams", auth("admin"), (req, res) => {
     const info = dbTransaction();
     res.json({ success: true, id: info.lastInsertRowid });
   } catch (e) {
-    res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message
-    });
+    res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message });
   }
 });
 // --- Usuwanie egzaminów ---
@@ -244,14 +275,14 @@ app.delete("/api/exams/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
-// --- Results ---
-// Zaktualizowany endpoint, który przyjmuje więcej danych o wynikach
+// --- Results --- 
 app.post("/api/results", auth(), (req, res) => {
-    const { examId, examName, correct, wrong, total, percent } = req.body || {};
+    const { examId, examName, correct, wrong, total, percent, closedCorrect, closedWrong, openCorrect, openWrong } = req.body || {};
     try {
-        db.prepare("INSERT INTO results (user, exam_id, exam_name, correct, wrong, total, percent) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent));
+        db.prepare(`
+            INSERT INTO results (user, exam_id, exam_name, correct, wrong, total, percent, closed_correct, closed_wrong, open_correct, open_wrong)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent), closedCorrect, closedWrong, openCorrect, openWrong);
         res.json({ success: true });
     } catch (e) {
         res.status(400).json({ error: e.message });
@@ -261,33 +292,61 @@ app.post("/api/results", auth(), (req, res) => {
 app.get("/api/stats", auth(), (req, res) => {
     const user = req.user.name;
 
+    // Pobierz ogólne statystyki rozwiązanych zadań (total, solved)
     const generalStats = db.prepare(`
-        SELECT 
-            COUNT(s.id) as total_solved,
-            SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as total_correct,
-            SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as total_wrong
-        FROM solved s WHERE s.user = ?
-    `).get(user);
+        SELECT COUNT(*) as total_tasks FROM tasks;
+    `).get();
+    generalStats.solved = db.prepare(`
+        SELECT COUNT(*) as solved_tasks FROM solved WHERE user = ?;
+    `).get(user).solved_tasks;
 
+    // Pobierz statystyki rozwiązanych zadań z podziałem na typ
     const typeStats = db.prepare(`
-        SELECT 
-            t.type,
-            SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as correct,
-            SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as wrong
-        FROM solved s
-        JOIN tasks t ON s.task_id = t.id
-        WHERE s.user = ?
-        GROUP BY t.type
+        SELECT T.type, SUM(S.is_correct) AS correct, COUNT(S.is_correct) - SUM(S.is_correct) AS wrong
+        FROM solved S
+        JOIN tasks T ON S.task_id = T.id
+        WHERE S.user = ?
+        GROUP BY T.type;
     `).all(user);
-
-    const solvedExams = db.prepare("SELECT exam_name, correct, total, percent FROM results WHERE user = ? ORDER BY id DESC").all(user);
 
     const formattedTypeStats = typeStats.reduce((acc, curr) => {
         acc[curr.type] = { correct: curr.correct, wrong: curr.wrong };
         return acc;
-    }, {});
+    }, { otwarte: { correct: 0, wrong: 0 }, zamkniete: { correct: 0, wrong: 0 } });
 
-    res.json({ generalStats, typeStats: formattedTypeStats, solvedExams });
+    // Pobierz wyniki z egzaminów
+    const solvedExams = db.prepare(`
+        SELECT exam_name, correct, wrong, total, percent
+        FROM results 
+        WHERE user = ? 
+        ORDER BY id DESC
+    `).all(user);
+
+    // Pobierz statystyki rozwiązanych zadań z podziałem na arkusz
+    const sheetStats = db.prepare(`
+        SELECT T.arkusz, T.type, SUM(S.is_correct) AS correct, COUNT(S.is_correct) - SUM(S.is_correct) AS wrong
+        FROM solved S
+        JOIN tasks T ON S.task_id = T.id
+        WHERE S.user = ? AND T.arkusz IS NOT NULL
+        GROUP BY T.arkusz, T.type
+        ORDER BY T.arkusz;
+    `).all(user);
+
+    const formattedSheetStats = sheetStats.reduce((acc, curr) => {
+        if (!acc[curr.arkusz]) {
+            acc[curr.arkusz] = {};
+        }
+        acc[curr.arkusz][curr.type] = { correct: curr.correct, wrong: curr.wrong };
+        return acc;
+    }, {});
+    
+    // Konwersja obiektu z arkuszami na tablicę, aby było łatwiej renderować na froncie
+    const sheetStatsArray = Object.keys(formattedSheetStats).map(arkusz => {
+        const stats = formattedSheetStats[arkusz];
+        return { arkusz, ...stats };
+    });
+
+    res.json({ generalStats, typeStats: formattedTypeStats, solvedExams, sheetStats: sheetStatsArray });
 });
 
 // --- Start Server ---
@@ -331,7 +390,10 @@ app.listen(PORT, () => {
       wrong INTEGER NOT NULL,
       total INTEGER NOT NULL,
       percent REAL NOT NULL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      closed_correct INTEGER,
+      closed_wrong INTEGER,
+      open_correct INTEGER,
+      open_wrong INTEGER
     );
   `);
 });
