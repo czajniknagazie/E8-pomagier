@@ -210,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'wszystkie':
             case 'zamkniete':
             case 'otwarte':
+            case 'wrong-answers':
                 await renderRandomTaskView(view);
                 break;
             case 'egzaminy':
@@ -233,6 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'exam-review':
                 await renderExamReviewTask();
                 break;
+            case 'exam-self-assess':
+                renderExamSelfAssessment();
+                break;
         }
     }
 
@@ -240,10 +244,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Random Task Mode
     async function renderRandomTaskView(type) {
-        const typeName = { wszystkie: 'Wszystkie zadania', zamkniete: 'Zadania zamknięte', otwarte: 'Zadania otwarte' }[type];
+        const typeName = { 
+            wszystkie: 'Wszystkie zadania', 
+            zamkniete: 'Zadania zamknięte', 
+            otwarte: 'Zadania otwarte',
+            'wrong-answers': 'Powtórka błędnych zadań'
+        }[type];
         mainContent.innerHTML = `<h1>${typeName}</h1>`;
         
-        const task = await api.request(`/tasks/random?type=${type}`);
+        const endpoint = type === 'wrong-answers' ? `/tasks/random?mode=wrong` : `/tasks/random?type=${type}`;
+        const task = await api.request(endpoint);
         appState.currentTask = task;
 
         if (!task) {
@@ -251,9 +261,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="content-box">
                     <p><strong>Gratulacje! 🎉</strong></p>
                     <p>Rozwiązałeś wszystkie dostępne zadania w tym trybie. Chcesz zacząć od nowa?</p>
-                    <button id="reset-progress-btn">Resetuj postępy</button>
+                    <button id="reset-progress-btn">Resetuj wszystkie postępy</button>
+                    <button id="redo-wrong-btn">Powtórz źle zrobione zadania</button>
                 </div>`;
             document.getElementById('reset-progress-btn').addEventListener('click', handleResetProgress);
+            document.getElementById('redo-wrong-btn').addEventListener('click', handleRedoWrongProgress);
             return;
         }
 
@@ -358,6 +370,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleRedoWrongProgress() {
+        const isConfirmed = confirm("Czy na pewno chcesz zresetować tylko błędnie zrobione zadania? Zostaną usunięte z twojego arkusza osiągnięć, abyś mógł je powtórzyć.");
+        if (isConfirmed) {
+            const result = await api.request('/solved/wrong', 'DELETE');
+            if (result && result.success) {
+                alert("Błędne zadania zostały zresetowane! Zaczynasz tryb 'Powtórka błędnych zadań'.");
+                navigateTo('wrong-answers');
+            }
+        }
+    }
+
     // Exams List
     async function renderExamsList() {
         const exams = await api.request('/exams');
@@ -377,12 +400,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         examsHtml += `</ul>`;
         mainContent.innerHTML = `<h1>Wybierz Egzamin</h1><div class="content-box">${examsHtml}</div>`;
-
         mainContent.querySelectorAll('button[data-exam-id]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const examId = e.target.dataset.examId;
                 const examName = e.target.dataset.examName;
-                const action = e.target.dataset.action;
+                const action = e.target.dataset.dataset.action;
                 if (action === 'start') {
                     startExam(examId, examName);
                 } else if (action === 'review') {
@@ -391,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-    
+
     // Exam Mode
     async function startExam(examId, examName) {
         const examData = await api.request(`/exams/${examId}`);
@@ -399,20 +421,9 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Ten egzamin jest pusty lub nie można go załadować.');
             return;
         }
-
-        appState.examState = {
-            active: true,
-            tasks: examData.tasks,
-            currentIndex: 0,
-            answers: {},
-            timer: null,
-            examId,
-            examName
-        };
-
+        appState.examState = { active: true, tasks: examData.tasks, currentIndex: 0, answers: {}, timer: null, examId, examName };
         const timerDuration = 125 * 60;
         let timeLeft = timerDuration;
-        
         appState.examState.timer = setInterval(() => {
             timeLeft--;
             const minutes = Math.floor(timeLeft / 60);
@@ -425,17 +436,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 endExam(true);
             }
         }, 1000);
-
         navigateTo('exam-start');
     }
 
     function renderExamTask() {
         const { tasks, currentIndex, answers } = appState.examState;
         const task = tasks[currentIndex];
-
         let answerHtml = '';
         const savedAnswer = answers[task.id];
-
         if (task.type === 'zamkniete') {
             answerHtml = `<div class="task-options">
                 ${task.opcje.map(opt => `
@@ -445,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź...">${savedAnswer || ''}</textarea>`;
         }
-        
         const examHtml = `
             <div id="exam-timer"></div>
             <h1>Egzamin: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
@@ -463,17 +470,14 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         mainContent.innerHTML = examHtml;
-
         document.getElementById('prev-btn').addEventListener('click', () => navigateExam(-1));
         document.getElementById('next-btn').addEventListener('click', () => navigateExam(1));
     }
-    
+
     function navigateExam(direction) {
         saveCurrentExamAnswer();
         const newIndex = appState.examState.currentIndex + direction;
-
         if (newIndex < 0 || newIndex > appState.examState.tasks.length) return;
-
         if (newIndex === appState.examState.tasks.length) {
             endExam(true);
         } else {
@@ -481,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderExamTask();
         }
     }
-    
+
     function saveCurrentExamAnswer() {
         const task = appState.examState.tasks[appState.examState.currentIndex];
         let userAnswer;
@@ -491,432 +495,308 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             userAnswer = document.getElementById('open-answer').value;
         }
-        if (userAnswer) {
-            appState.examState.answers[task.id] = userAnswer;
-        }
+        appState.examState.answers[task.id] = userAnswer;
     }
 
-    async function endExam(isFinished) {
+    async function endExam(saveProgress) {
         clearInterval(appState.examState.timer);
+        saveCurrentExamAnswer(); // Save the last answer
         
-        if (isFinished) {
-            saveCurrentExamAnswer(); // Zapisz ostatnią odpowiedź przed podsumowaniem
-            let correctCount = 0;
-            let wrongCount = 0;
-            let closedTasksTotal = 0;
-
-            appState.examState.tasks.forEach(task => {
-                const userAnswer = appState.examState.answers[task.id];
-                if (task.type === 'zamkniete') {
-                    closedTasksTotal++;
-                    if (userAnswer && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase()) {
-                        correctCount++;
-                    } else {
-                        wrongCount++;
-                    }
-                }
-            });
-
-            const total = appState.examState.tasks.length;
-            const percent = closedTasksTotal > 0 ? ((correctCount / closedTasksTotal) * 100) : 0;
-            
-            await api.request('/results', 'POST', {
-                examId: appState.examState.examId,
-                examName: appState.examState.examName,
-                correct: correctCount,
-                wrong: wrongCount,
-                total: total,
-                percent: percent
-            });
-            
-            mainContent.innerHTML = `
-                <h1>Wyniki Egzaminu</h1>
-                <div class="content-box">
-                    <h2>${appState.examState.examName}</h2>
-                    <p>Uzyskany wynik (z zadań zamkniętych): <strong>${correctCount} / ${closedTasksTotal} (${percent.toFixed(0)}%)</strong></p>
-                    <p>Całkowita liczba zadań w arkuszu: ${total}. Zadania otwarte wymagają samodzielnej weryfikacji.</p>
-                    <button id="back-to-exams">Wróć do listy egzaminów</button>
-                </div>`;
-            document.getElementById('back-to-exams').addEventListener('click', () => navigateTo('egzaminy'));
-
-        }
-
-        appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null };
-    }
-    
-    // --- New Review Mode ---
-    async function startExamReview(examId, examName) {
-        const examData = await api.request(`/exams/${examId}`);
-        if (!examData || !examData.tasks.length) {
-            alert('Ten egzamin jest pusty lub nie można go załadować.');
+        if (!saveProgress) {
+            appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null, examId: null, examName: '' };
             return;
         }
 
-        appState.examState = {
-            active: true,
-            tasks: examData.tasks,
-            currentIndex: 0,
-            answers: {},
-            timer: null,
-            examId,
-            examName
-        };
-
-        navigateTo('exam-review');
-    }
-
-    function renderExamReviewTask() {
-        const { tasks, currentIndex } = appState.examState;
-        const task = tasks[currentIndex];
-        
-        let answerHtml = '';
-        if (task.type === 'zamkniete') {
-            answerHtml = `
-                <div class="task-options">
-                    ${task.opcje.map(opt => `
-                        <label>
-                            <input type="radio" name="answer" value="${opt}"> ${opt}
-                        </label>
-                    `).join('')}
-                </div>`;
+        const openTasksToAssess = appState.examState.tasks.filter(t => t.type === 'otwarte');
+        if (openTasksToAssess.length > 0) {
+            appState.examState.openTasksToAssess = openTasksToAssess;
+            appState.examState.assessmentIndex = 0;
+            appState.examState.selfAssessedScore = { correct: 0, wrong: 0 };
+            navigateTo('exam-self-assess');
         } else {
-            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
+            await submitExamResults();
         }
+    }
+    
+    async function submitExamResults() {
+        let correctCount = 0;
+        let wrongCount = 0;
+        const totalCount = appState.examState.tasks.length;
+        const openTasks = appState.examState.tasks.filter(t => t.type === 'otwarte');
+        const closedTasks = appState.examState.tasks.filter(t => t.type === 'zamkniete');
 
-        const taskHtml = `
-            <h1>Przeglądanie: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
-            <div class="content-box">
-                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
-                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
-                <form id="task-review-form">
-                    ${answerHtml}
-                    <button type="submit">Sprawdź</button>
-                </form>
-                <div id="result-box"></div>
-                <div class="exam-navigation">
-                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
-                    <span></span>
-                    <button id="next-btn" ${currentIndex === tasks.length - 1 ? 'disabled' : ''}>Następne</button>
-                </div>
-            </div>
-        `;
-        mainContent.innerHTML = taskHtml;
-        
-        const form = document.getElementById('task-review-form');
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const task = appState.examState.tasks[appState.examState.currentIndex];
-            let userAnswer;
-            if (task.type === 'zamkniete') {
-                const selected = form.querySelector('input[name="answer"]:checked');
-                userAnswer = selected ? selected.value : '';
+        // Ocena zadań zamkniętych
+        closedTasks.forEach(task => {
+            const userAnswer = appState.examState.answers[task.id];
+            if (userAnswer && userAnswer.toLowerCase() === task.odpowiedz.toLowerCase()) {
+                correctCount++;
             } else {
-                userAnswer = form.querySelector('#open-answer').value;
-            }
-            
-            const isCorrect = userAnswer.toLowerCase() === task.odpowiedz.toLowerCase();
-            showReviewResult(isCorrect, task.odpowiedz);
-            
-            form.querySelector('button[type="submit"]').disabled = true;
-            if (task.type === 'zamkniete') {
-                form.querySelectorAll('input').forEach(input => input.disabled = true);
-            } else {
-                form.querySelector('#open-answer').disabled = true;
+                wrongCount++;
             }
         });
         
-        document.getElementById('prev-btn').addEventListener('click', () => navigateReview(-1));
-        document.getElementById('next-btn').addEventListener('click', () => navigateReview(1));
+        // Doliczenie punktów z samooceny pytań otwartych
+        correctCount += appState.examState.selfAssessedScore.correct;
+        wrongCount += appState.examState.selfAssessedScore.wrong;
+
+        const percent = Math.floor((correctCount / totalCount) * 100);
+
+        await api.request('/results', 'POST', {
+            examId: appState.examState.examId,
+            examName: appState.examState.examName,
+            correct: correctCount,
+            wrong: wrongCount,
+            total: totalCount,
+            percent
+        });
+        
+        const resultText = `Egzamin zakończony! Twoje wyniki:
+            Poprawne odpowiedzi: ${correctCount}
+            Błędne odpowiedzi: ${wrongCount}
+            Łącznie punktów: ${correctCount} z ${totalCount}
+            Procentowo: ${percent}%`;
+            
+        alert(resultText);
+        
+        appState.examState = { active: false, tasks: [], currentIndex: 0, answers: {}, timer: null, examId: null, examName: '' };
+        navigateTo('egzaminy'); // Navigate back to the exams list or stats view
     }
     
-    function navigateReview(direction) {
-        const newIndex = appState.examState.currentIndex + direction;
-        appState.examState.currentIndex = newIndex;
-        renderExamReviewTask();
-    }
-    
-    function showReviewResult(isCorrect, correctAnswer) {
-        const resultBox = document.getElementById('result-box');
-        if (isCorrect) {
-            resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
-        } else {
-            resultBox.innerHTML = `<div class="result-box incorrect">Błędna odpowiedź. Poprawna to: <strong>${correctAnswer}</strong></div>`;
+    function renderExamSelfAssessment() {
+        const { openTasksToAssess, assessmentIndex, answers } = appState.examState;
+        if (assessmentIndex >= openTasksToAssess.length) {
+            submitExamResults();
+            return;
         }
-    }
 
+        const task = openTasksToAssess[assessmentIndex];
+        const userAnswer = answers[task.id] || "Brak odpowiedzi";
 
-    // Browse tasks
-    async function renderBrowseTasks() {
         mainContent.innerHTML = `
-            <h1>Przeglądaj Zadania</h1>
-            <div class="content-box wide">
-                <input type="text" id="search-tasks" placeholder="Szukaj po ID lub nazwie arkusza..." class="task-input">
-                <div id="browse-tasks-list" style="margin-top: 20px;">Ładowanie...</div>
+            <h1>Samoocena pytań otwartych</h1>
+            <div class="content-box">
+                <p><strong>Zadanie #${task.id} (${assessmentIndex + 1} / ${openTasksToAssess.length})</strong></p>
+                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
+                <div class="result-box">
+                    <p><strong>Twoja odpowiedź:</strong> ${userAnswer}</p>
+                    <p><strong>Poprawna odpowiedź:</strong> ${task.odpowiedz}</p>
+                    <p>Oceń swoją odpowiedź:</p>
+                    <button id="self-assess-correct">Było dobrze</button>
+                    <button id="self-assess-incorrect">Było źle</button>
+                </div>
             </div>`;
         
-        const searchInput = document.getElementById('search-tasks');
-        searchInput.addEventListener('keyup', () => filterBrowseTasks(searchInput.value));
-
-        const tasks = await api.request('/tasks');
-        appState.allTasks = tasks; // Cache for filtering
-        displayFilteredTasks(tasks);
-    }
-
-    function filterBrowseTasks(query) {
-        const lowerQuery = query.toLowerCase();
-        const filtered = appState.allTasks.filter(task => {
-            const arkusz = task.arkusz || '';
-            return task.id.toString().includes(lowerQuery) || arkusz.toLowerCase().includes(lowerQuery);
+        document.getElementById('self-assess-correct').addEventListener('click', () => {
+            appState.examState.selfAssessedScore.correct++;
+            appState.examState.assessmentIndex++;
+            renderExamSelfAssessment();
         });
-        displayFilteredTasks(filtered);
+        document.getElementById('self-assess-incorrect').addEventListener('click', () => {
+            appState.examState.selfAssessedScore.wrong++;
+            appState.examState.assessmentIndex++;
+            renderExamSelfAssessment();
+        });
     }
 
-    function displayFilteredTasks(tasks) {
-        const listEl = document.getElementById('browse-tasks-list');
-        if (!tasks || !tasks.length) {
-            listEl.innerHTML = '<p>Brak zadań spełniających kryteria.</p>';
-            return;
-        }
-        listEl.innerHTML = `
-            <ul class="item-list">
-                ${tasks.map(task => `
-                    <li class="task-list-item">
-                        <img src="${task.tresc}" alt="Miniatura">
-                        <div>
-                            <strong>Zadanie #${task.id}</strong><br>
-                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
-                        </div>
-                        <span>Odp: ${task.odpowiedz}</span>
-                    </li>
-                `).join('')}
-            </ul>`;
+    // Browse Tasks View
+    async function renderBrowseTasks() {
+        const tasks = await api.request('/tasks');
+        if (!tasks) return;
+
+        let tasksHtml = `
+            <div class="content-box">
+                <input type="text" id="browse-search" placeholder="Szukaj po ID lub arkuszu..." class="search-input">
+            </div>
+            <ul id="browse-list" class="item-list">`;
+        tasksHtml += renderTasksList(tasks);
+        tasksHtml += `</ul>`;
+
+        mainContent.innerHTML = `<h1>Przeglądaj zadania</h1>${tasksHtml}`;
+
+        document.getElementById('browse-search').addEventListener('input', async (e) => {
+            const search = e.target.value;
+            const filteredTasks = await api.request(`/tasks?search=${search}`);
+            document.getElementById('browse-list').innerHTML = renderTasksList(filteredTasks);
+        });
     }
 
-    // Stats view
+    function renderTasksList(tasks) {
+        if (!tasks.length) return `<p>Brak zadań pasujących do kryteriów.</p>`;
+        return tasks.map(task => `
+            <li class="list-item">
+                <img src="${task.tresc}" alt="Miniatura" class="list-image">
+                <div>
+                    <strong>Zadanie #${task.id}</strong><br>
+                    <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                </div>
+                <div class="task-action-buttons">
+                    <button data-task-id="${task.id}" data-action="delete" class="delete-btn">Usuń</button>
+                    <a href="${task.tresc}" target="_blank" class="view-link">Zobacz</a>
+                </div>
+            </li>
+        `).join('');
+    }
+
+    // Stats View
     async function renderStatsView() {
         const stats = await api.request('/stats');
         if (!stats) return;
 
         const { generalStats, typeStats, solvedExams } = stats;
 
-        const openStats = typeStats.find(t => t.type === 'otwarte') || { correct: 0, wrong: 0 };
-        const closedStats = typeStats.find(t => t.type === 'zamkniete') || { correct: 0, wrong: 0 };
-
-        const openTotal = (openStats.correct || 0) + (openStats.wrong || 0);
-        const closedTotal = (closedStats.correct || 0) + (closedStats.wrong || 0);
-
-        const openPercent = openTotal > 0 ? ((openStats.correct || 0) / openTotal * 100) : 0;
-        const closedPercent = closedTotal > 0 ? ((closedStats.correct || 0) / closedTotal * 100) : 0;
-
-        let advice = '';
-        if (openTotal > 5 && closedTotal > 5) {
-            if (openPercent < closedPercent - 10) advice = 'Poćwicz zadania otwarte!';
-            else if (closedPercent < openPercent - 10) advice = 'Poćwicz zadania zamknięte!';
+        let statsHtml = `
+            <div class="content-box stats-box">
+                <h2>Statystyki ogólne</h2>
+                <p><strong>Rozwiązane zadania:</strong> ${generalStats.total_solved || 0}</p>
+                <p class="correct"><strong>Poprawne:</strong> ${generalStats.total_correct || 0}</p>
+                <p class="incorrect"><strong>Błędne:</strong> ${generalStats.total_wrong || 0}</p>
+            </div>`;
+        
+        if (typeStats.length) {
+            statsHtml += `<div class="content-box stats-box">
+                <h2>Statystyki według typu</h2>
+                ${typeStats.map(s => `
+                    <p><strong>${s.type === 'zamkniete' ? 'Zamknięte' : 'Otwarte'}:</strong> Poprawne: ${s.correct}, Błędne: ${s.wrong}</p>
+                `).join('')}
+            </div>`;
         }
 
-        const statsHtml = `
-            <h1>Arkusz Osiągnięć</h1>
-            <div class="content-box">
-                <h2>Ogólne Statystyki</h2>
-                <div class="stats-grid">
-                    <div class="stat-card"><h3>Rozwiązane</h3><span class="value">${generalStats.total_solved || 0}</span></div>
-                    <div class="stat-card"><h3>Poprawne</h3><span class="value" style="color: green;">${generalStats.total_correct || 0}</span></div>
-                    <div class="stat-card"><h3>Błędne</h3><span class="value" style="color: red;">${generalStats.total_wrong || 0}</span></div>
+        if (solvedExams.length) {
+            statsHtml += `<div class="content-box stats-box">
+                <h2>Ostatnie egzaminy</h2>
+                <ul class="item-list exam-results-list">
+                    ${solvedExams.map(e => `
+                        <li>
+                            <span><strong>${e.exam_name}</strong> - ${e.percent}% (${e.correct}/${e.total})</span>
+                            <small>${new Date(e.created_at).toLocaleString()}</small>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>`;
+        }
+
+        mainContent.innerHTML = `<h1>Arkusz osiągnięć</h1>${statsHtml}`;
+    }
+
+    // Admin Views
+    async function renderAdminTasks() {
+        const tasks = await api.request('/tasks');
+        if (!tasks) return;
+
+        let adminTasksHtml = `
+            <div class="content-box wide">
+                <h2>Dodaj nowe zadania</h2>
+                <p>Możesz dodać zadanie ręcznie lub wrzucić arkusz z zadaniami w formie JSON.</p>
+                <label for="tasks-file-input" class="file-label">
+                    Wybierz plik JSON
+                    <input type="file" id="tasks-file-input" accept="application/json" class="hidden-input">
+                </label>
+                <button id="add-bulk-tasks" class="upload-btn">Dodaj zadania z pliku</button>
+            </div>`;
+
+        mainContent.innerHTML = `<h1>Zarządzanie zadaniami</h1>${adminTasksHtml}`;
+
+        document.getElementById('add-bulk-tasks').addEventListener('click', async () => {
+            const file = document.getElementById('tasks-file-input').files[0];
+            if (!file) {
+                alert("Wybierz plik JSON.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const tasks = JSON.parse(e.target.result);
+                    const result = await api.request('/tasks/bulk', 'POST', { tasks });
+                    if (result && result.success) {
+                        alert(`Pomyślnie dodano ${result.count} zadań.`);
+                        renderAdminTasks(); // Reload view
+                    }
+                } catch (err) {
+                    alert('Błąd wczytywania pliku JSON: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Add task list below
+        const taskListHtml = `
+            <div class="content-box wide">
+                <h2>Wszystkie zadania</h2>
+                <input type="text" id="admin-browse-search" placeholder="Szukaj po ID lub arkuszu..." class="search-input">
+                <ul id="admin-tasks-list" class="item-list">
+                    ${renderAdminTasksList(tasks)}
+                </ul>
+            </div>`;
+        mainContent.innerHTML += taskListHtml;
+
+        mainContent.addEventListener('click', async (e) => {
+            if (e.target.dataset.action === 'delete') {
+                const taskId = e.target.dataset.taskId;
+                if (confirm(`Czy na pewno chcesz usunąć zadanie #${taskId}?`)) {
+                    await api.request(`/tasks/${taskId}`, 'DELETE');
+                    renderAdminTasks(); // Reload view
+                }
+            }
+        });
+
+        document.getElementById('admin-browse-search').addEventListener('input', async (e) => {
+            const search = e.target.value;
+            const filteredTasks = await api.request(`/tasks?search=${search}`);
+            document.getElementById('admin-tasks-list').innerHTML = renderAdminTasksList(filteredTasks);
+        });
+    }
+
+    function renderAdminTasksList(tasks) {
+        if (!tasks.length) return `<p>Brak zadań.</p>`;
+        return tasks.map(task => `
+            <li class="list-item">
+                <img src="${task.tresc}" alt="Miniatura" class="list-image">
+                <div>
+                    <strong>Zadanie #${task.id}</strong><br>
+                    <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
                 </div>
-                ${advice ? `<div class="stat-card"><div class="advice">${advice}</div></div>` : ''}
-            </div>
-            <div class="content-box">
-                <h2>Skuteczność wg typu</h2>
-                 <div class="stats-grid">
-                    <div class="stat-card"><h3>Otwarte</h3><span class="value">${openPercent.toFixed(0)}%</span><p>(${openStats.correct || 0}/${openTotal})</p></div>
-                    <div class="stat-card"><h3>Zamknięte</h3><span class="value">${closedPercent.toFixed(0)}%</span><p>(${closedStats.correct || 0}/${closedTotal})</p></div>
-                 </div>
-            </div>
-            <div class="content-box">
-                <h2>Rozwiązane Egzaminy</h2>
-                ${solvedExams.length ? `
-                    <ul class="item-list">
-                        ${solvedExams.map(e => `
+                <div class="task-action-buttons">
+                    <button data-task-id="${task.id}" data-action="delete" class="delete-btn">Usuń</button>
+                    <a href="${task.tresc}" target="_blank" class="view-link">Zobacz</a>
+                </div>
+            </li>
+        `).join('');
+    }
+
+    async function renderAdminExams() {
+        const [exams, tasks] = await Promise.all([
+            api.request('/exams'),
+            api.request('/tasks')
+        ]);
+        if (!exams || !tasks) return;
+
+        let adminExamsHtml = `
+            <div class="content-box wide">
+                <h2>Utwórz nowy egzamin</h2>
+                <form id="create-exam-form">
+                    <label for="new-exam-name">Nazwa egzaminu:</label>
+                    <input type="text" id="new-exam-name" required>
+                    <label for="new-exam-arkusz">Nazwa arkusza:</label>
+                    <input type="text" id="new-exam-arkusz" required>
+                    <h3>Wybierz zadania:</h3>
+                    <ul id="exam-tasks-list" class="item-list task-selection-list">
+                        ${tasks.map(task => `
                             <li class="list-item">
-                                <span><strong>${e.exam_name}</strong> - ${new Date(e.created_at).toLocaleDateString()}</span>
-                                <span>Wynik: <strong>${e.percent.toFixed(0)}%</strong> (${e.correct}/${e.total})</span>
+                                <input type="checkbox" value="${task.id}" style="transform: scale(1.5);">
+                                <img src="${task.tresc}" alt="Miniatura">
+                                <div>
+                                    <strong>Zadanie #${task.id}</strong><br>
+                                    <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                                </div>
                             </li>
                         `).join('')}
                     </ul>
-                ` : '<p>Brak rozwiązanych egzaminów.</p>'}
-            </div>
-        `;
-        mainContent.innerHTML = statsHtml;
-    }
-
-
-    // --- ADMIN VIEWS ---
-    
-    // Admin Tasks Management
-    async function renderAdminTasks() {
-        mainContent.innerHTML = `
-            <h1>Zarządzaj Zadaniami</h1>
-            <div class="content-box wide">
-                <button id="show-add-task-form">Dodaj nowe zadania (masowo)</button>
-                <div id="add-task-form-container" class="hidden" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 20px;"></div>
-                <hr>
-                <h2>Istniejące zadania</h2>
-                <div id="admin-tasks-list">Ładowanie...</div>
-            </div>`;
-
-        document.getElementById('show-add-task-form').addEventListener('click', renderBulkAddTaskForm);
-        
-        const tasks = await api.request('/tasks');
-        if(!tasks) return;
-        const listEl = document.getElementById('admin-tasks-list');
-        listEl.innerHTML = `
-            <ul class="item-list">
-                ${tasks.map(task => `
-                    <li class="task-list-item">
-                        <img src="${task.tresc}" alt="Miniatura">
-                        <div>
-                            <strong>Zadanie #${task.id}</strong><br>
-                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}, Odp: ${task.odpowiedz}</small>
-                        </div>
-                        <div></div>
-                    </li>
-                `).join('')}
-            </ul>`;
-    }
-
-    function renderBulkAddTaskForm() {
-        const formContainer = document.getElementById('add-task-form-container');
-        formContainer.classList.toggle('hidden');
-        if (formContainer.classList.contains('hidden')) {
-            formContainer.innerHTML = '';
-            return;
-        }
-        
-        formContainer.innerHTML = `
-            <h3>Krok 1: Wybierz typ i załącz pliki</h3>
-            <label for="task-type">Typ zadań:</label>
-            <select id="task-type">
-                <option value="zamkniete">Zamknięte</option>
-                <option value="otwarte">Otwarte</option>
-            </select>
-            <input type="file" id="task-files" multiple accept="image/*" style="margin-left: 10px;">
-            <hr>
-            <h3>Krok 2: Uzupełnij dane dla każdego zadania</h3>
-            <div id="bulk-upload-preview"></div>
-            <button id="save-bulk-tasks" class="hidden">Zapisz wszystkie zadania</button>
-        `;
-
-        document.getElementById('task-files').addEventListener('change', handleFileSelectionForBulkAdd);
-        document.getElementById('save-bulk-tasks').addEventListener('click', handleSaveBulkTasks);
-    }
-
-    async function handleFileSelectionForBulkAdd(e) {
-        const files = e.target.files;
-        if (!files.length) return;
-
-        const uploadResult = await api.upload(files);
-        if (!uploadResult || !uploadResult.files) {
-            return;
-        }
-        
-        const previewContainer = document.getElementById('bulk-upload-preview');
-        const taskType = document.getElementById('task-type').value;
-        previewContainer.innerHTML = '';
-
-        uploadResult.files.forEach((file) => {
-            previewContainer.innerHTML += `
-                <div class="upload-item" data-url="${file.url}">
-                    <img src="${file.url}" alt="Podgląd zadania">
-                    <label>Odpowiedź:</label>
-                    <input type="text" name="odpowiedz" required>
-                    <label>Punkty:</label>
-                    <input type="number" name="punkty" value="1" min="1" required>
-                    ${taskType === 'zamkniete' ? `
-                        <label>Opcje (oddzielone przecinkiem):</label>
-                        <input type="text" name="opcje" placeholder="A,B,C,D" required>
-                    ` : ''}
-                </div>`;
-        });
-        document.getElementById('save-bulk-tasks').classList.remove('hidden');
-    }
-
-    async function handleSaveBulkTasks() {
-        const previewContainer = document.getElementById('bulk-upload-preview');
-        const taskItems = previewContainer.querySelectorAll('.upload-item');
-        const taskType = document.getElementById('task-type').value;
-        
-        const tasksPayload = [];
-        let isValid = true;
-
-        taskItems.forEach(item => {
-            const tresc = item.dataset.url;
-            const odpowiedz = item.querySelector('input[name="odpowiedz"]').value;
-            const punkty = item.querySelector('input[name="punkty"]').value;
-            
-            if (!odpowiedz || !punkty) {
-                isValid = false;
-            }
-
-            const taskData = {
-                type: taskType,
-                tresc,
-                odpowiedz,
-                punkty
-            };
-
-            if (taskType === 'zamkniete') {
-                const opcjeRaw = item.querySelector('input[name="opcje"]').value;
-                if (!opcjeRaw) isValid = false;
-                taskData.opcje = opcjeRaw.split(',').map(o => o.trim());
-            }
-            tasksPayload.push(taskData);
-        });
-
-        if (!isValid) {
-            alert('Uzupełnij wszystkie pola dla każdego zadania!');
-            return;
-        }
-
-        const result = await api.request('/tasks/bulk', 'POST', { tasks: tasksPayload });
-        if (result) {
-            alert(`Dodano ${result.count} nowych zadań.`);
-            navigateTo('admin-zadania');
-        }
-    }
-    
-    async function renderAdminExams() {
-        mainContent.innerHTML = `
-            <h1>Zarządzaj Egzaminami</h1>
-            <div class="content-box wide">
-                <h3>Stwórz nowy egzamin</h3>
-                <p>Zaznacz zadania z listy poniżej, a następnie wpisz nazwę i kliknij "Stwórz Egzamin".</p>
-                <form id="create-exam-form" style="display:flex; gap:10px; margin-bottom: 20px;">
-                    <input type="text" id="new-exam-name" placeholder="Nazwa nowego egzaminu" required class="task-input">
-                    <input type="text" id="new-exam-arkusz" placeholder="Nazwa arkusza dla zadań" required class="task-input">
-                    <button type="submit">Stwórz Egzamin</button>
+                    <button type="submit">Utwórz egzamin</button>
                 </form>
-                <hr>
-                <h3>Wybierz zadania do egzaminu</h3>
-                <div id="exam-tasks-list">Ładowanie...</div>
             </div>`;
         
-        const tasks = await api.request('/tasks');
-        if(!tasks) return;
-        const listEl = document.getElementById('exam-tasks-list');
-        listEl.innerHTML = `
-            <ul class="item-list">
-                ${tasks.map(task => `
-                    <li class="task-list-item">
-                        <input type="checkbox" value="${task.id}" style="transform: scale(1.5);">
-                        <img src="${task.tresc}" alt="Miniatura">
-                        <div>
-                            <strong>Zadanie #${task.id}</strong><br>
-                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
-                        </div>
-                    </li>
-                `).join('')}
-            </ul>`;
-            
+        mainContent.innerHTML = `<h1>Zarządzanie egzaminami</h1>${adminExamsHtml}`;
+        
         document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
     }
 
@@ -939,6 +819,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Start the App ---
+    // Exam Review
+    async function startExamReview(examId, examName) {
+        const examData = await api.request(`/exams/${examId}`);
+        if (!examData || !examData.tasks.length) {
+            alert('Ten egzamin jest pusty lub nie można go załadować.');
+            return;
+        }
+        appState.examState = { active: true, tasks: examData.tasks, currentIndex: 0, answers: {}, timer: null, examId, examName };
+        navigateTo('exam-review');
+    }
+
+    function renderExamReviewTask() {
+        const { tasks, currentIndex } = appState.examState;
+        const task = tasks[currentIndex];
+
+        let answerHtml = '';
+        if (task.type === 'zamkniete') {
+            answerHtml = `
+                <div class="task-options">
+                    ${task.opcje.map(opt => `
+                        <label>
+                            <input type="radio" name="answer" value="${opt}" disabled> ${opt}
+                        </label>
+                    `).join('')}
+                </div>`;
+            const correctInput = document.querySelector(`input[value="${task.odpowiedz}"]`);
+            if (correctInput) {
+                correctInput.closest('label').classList.add('correct-answer');
+            }
+        } else {
+            answerHtml = `<p><strong>Poprawna odpowiedź:</strong> ${task.odpowiedz}</p>`;
+        }
+        
+        const reviewHtml = `
+            <h1>Przegląd Egzaminu: ${appState.examState.examName} (${currentIndex + 1} / ${tasks.length})</h1>
+            <div class="content-box">
+                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
+                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
+                <div id="review-form">
+                    ${answerHtml}
+                </div>
+                <div class="exam-navigation">
+                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
+                    <span></span>
+                    <button id="next-btn">${currentIndex === tasks.length - 1 ? 'Zakończ przegląd' : 'Następne'}</button>
+                </div>
+            </div>`;
+        mainContent.innerHTML = reviewHtml;
+        document.getElementById('prev-btn').addEventListener('click', () => navigateExamReview(-1));
+        document.getElementById('next-btn').addEventListener('click', () => navigateExamReview(1));
+    }
+
+    function navigateExamReview(direction) {
+        const newIndex = appState.examState.currentIndex + direction;
+        if (newIndex < 0 || newIndex > appState.examState.tasks.length - 1) {
+            alert('Koniec przeglądu.');
+            navigateTo('egzaminy');
+            return;
+        }
+        appState.examState.currentIndex = newIndex;
+        renderExamReviewTask();
+    }
+
     init();
 });

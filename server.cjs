@@ -56,6 +56,7 @@ app.post("/api/admin/login", (req, res) => {
   const token = signToken(name, "admin");
   res.json({ token, role: "admin", name });
 });
+
 // --- Tasks ---
 app.get("/api/tasks", auth(), (req, res) => {
     const { search = '' } = req.query;
@@ -71,12 +72,15 @@ app.get("/api/tasks", auth(), (req, res) => {
 });
 
 app.get("/api/tasks/random", auth(), (req, res) => {
-    const { type } = req.query;
-    let query = `
-        SELECT * FROM tasks 
-        WHERE id NOT IN (SELECT task_id FROM solved WHERE user = ?)
-    `;
+    const { type, mode } = req.query;
+    let query;
     const params = [req.user.name];
+
+    if (mode === 'wrong') {
+        query = `SELECT * FROM tasks WHERE id IN (SELECT task_id FROM solved WHERE user = ? AND is_correct = 0)`;
+    } else {
+        query = `SELECT * FROM tasks WHERE id NOT IN (SELECT task_id FROM solved WHERE user = ?)`;
+    }
 
     if (type === 'zamkniete' || type === 'otwarte') {
         query += ' AND type = ?';
@@ -91,6 +95,7 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     }
     res.json(task || null);
 });
+
 // --- Solved Tasks ---
 app.post("/api/solved", auth(), (req, res) => {
   const { taskId, isCorrect } = req.body || {};
@@ -104,7 +109,7 @@ app.post("/api/solved", auth(), (req, res) => {
   }
 });
 
-// NOWOŚĆ: Endpoint do resetowania postępów
+// NOWOŚĆ: Endpoint do resetowania wszystkich postępów
 app.delete("/api/solved", auth(), (req, res) => {
   const user = req.user.name;
   try {
@@ -112,6 +117,17 @@ app.delete("/api/solved", auth(), (req, res) => {
     res.json({ success: true, message: "Postępy zresetowane." });
   } catch (e) {
     res.status(500).json({ error: "Błąd serwera podczas resetowania postępów: " + e.message });
+  }
+});
+
+// NOWOŚĆ: Endpoint do resetowania tylko błędnych zadań
+app.delete("/api/solved/wrong", auth(), (req, res) => {
+  const user = req.user.name;
+  try {
+    db.prepare("DELETE FROM solved WHERE user = ? AND is_correct = 0").run(user);
+    res.json({ success: true, message: "Błędne zadania zresetowane." });
+  } catch (e) {
+    res.status(500).json({ error: "Błąd serwera podczas resetowania błędnych zadań: " + e.message });
   }
 });
 
@@ -133,13 +149,12 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   }));
   res.json({ success: true, files });
 });
+
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   const { tasks } = req.body || {};
   if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
-
-  const ins = db.prepare(`INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty) VALUES (@type, @tresc, @odpowiedz, @opcje, @punkty)`);
-  
+  const ins = db.prepare(`INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES (@type, @tresc, @odpowiedz, @opcje, @punkty, @arkusz)`);
   const trx = db.transaction((arr) => {
     for (const t of arr) {
       ins.run({
@@ -148,70 +163,65 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
         odpowiedz: t.odpowiedz,
         opcje: t.opcje ? JSON.stringify(t.opcje) : null,
         punkty: Number(t.punkty) || 1,
+        arkusz: t.arkusz || null,
       });
     }
   });
-
   trx(tasks);
   res.json({ success: true, count: tasks.length });
 });
+
 // --- Usuwanie zadań ---
 app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
-    const { id } = req.params;
-    try {
-        const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
-        if (info.changes > 0) {
-            res.status(204).send(); // Sukces, brak treści
-        } else {
-            res.status(404).json({ error: "Zadanie nie znaleziono." });
-        }
-    } catch (e) {
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
+  const { id } = req.params;
+  try {
+    const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+    if (info.changes > 0) {
+      res.status(204).send(); // Sukces, brak treści
+    } else {
+      res.status(404).json({ error: "Zadanie nie znaleziono." });
     }
+  } catch (e) {
+    res.status(500).json({ error: "Błąd serwera: " + e.message });
+  }
 });
+
 // --- Exams ---
 app.get("/api/exams", auth(), (req, res) => {
-  const list = db.prepare("SELECT id, name FROM exams ORDER BY name ASC").all();
-  res.json(list);
+  const exams = db.prepare("SELECT * FROM exams ORDER BY created_at DESC").all();
+  res.json(exams);
 });
-app.get("/api/exams/:id", auth(), (req, res) => {
-  const exam = db.prepare("SELECT id, name, tasks FROM exams WHERE id=?").get(req.params.id);
-  if (!exam) return res.status(404).json({ error: "Nie ma takiego egzaminu" });
-  
-  const ids = JSON.parse(exam.tasks || "[]");
-  if (!ids.length) return res.json({ id: exam.id, name: exam.name, tasks: [] });
 
-  // Poprawione zapytanie SQL, które sortuje zadania po ID
-  const q = `SELECT * FROM tasks WHERE id IN (${ids.map(()=>"?").join(",")}) ORDER BY id ASC`;
-  const tasks = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
-  
-  res.json({ id: exam.id, name: exam.name, tasks: tasks });
+app.get("/api/exams/:id", auth(), (req, res) => {
+  const examId = req.params.id;
+  try {
+    const exam = db.prepare("SELECT * FROM exams WHERE id = ?").get(examId);
+    if (!exam) return res.status(404).json({ error: "Egzamin nie znaleziono." });
+    
+    const taskIds = JSON.parse(exam.tasks);
+    const placeholders = taskIds.map(() => '?').join(',');
+    const tasks = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(taskIds);
+    
+    // Sort tasks to match the order in the exam definition
+    const orderedTasks = taskIds.map(id => tasks.find(t => t.id === id));
+    
+    res.json({ ...exam, tasks: orderedTasks.map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post("/api/exams", auth("admin"), (req, res) => {
-    const { name, taskIds, arkuszName } = req.body || {};
-    if (!name || !Array.isArray(taskIds) || !taskIds.length) {
-        return res.status(400).json({ error: "Brak nazwy lub zadań" });
-    }
-
-    const dbTransaction = db.transaction(() => {
-        const examInfo = db.prepare("INSERT INTO exams (name, tasks) VALUES (?, ?)").run(name, JSON.stringify(taskIds));
-        const updateStmt = db.prepare("UPDATE tasks SET arkusz = ? WHERE id = ?");
-        for (const taskId of taskIds) {
-            updateStmt.run(arkuszName, taskId);
-        }
-        return examInfo;
-    });
-
-    try {
-        const info = dbTransaction();
-        res.json({ success: true, id: info.lastInsertRowid });
-    } catch (e) {
-        res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message });
-    }
+  const { name, taskIds, arkuszName } = req.body || {};
+  if (!name || !Array.isArray(taskIds) || !taskIds.length) return res.status(400).json({ error: "Brak nazwy lub zadań." });
+  try {
+    const info = db.prepare(`INSERT INTO exams (name, tasks) VALUES (?, ?)`).run(name, JSON.stringify(taskIds));
+    res.json({ success: true, id: info.lastInsertRowid });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
-// --- Usuwanie egzaminów ---
 app.delete("/api/exams/:id", auth("admin"), (req, res) => {
     const { id } = req.params;
     try {
@@ -225,13 +235,14 @@ app.delete("/api/exams/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-// --- Exam Results and Stats ---
+
 app.post("/api/results", auth(), (req, res) => {
     const { examId, examName, correct, wrong, total, percent } = req.body || {};
     db.prepare("INSERT INTO results (user, exam_id, exam_name, correct, wrong, total, percent) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent));
     res.json({ success: true });
 });
+
 app.get("/api/stats", auth(), (req, res) => {
     const user = req.user.name;
 
@@ -254,18 +265,11 @@ app.get("/api/stats", auth(), (req, res) => {
         GROUP BY t.type
     `).all(user);
 
-    const solvedExams = db.prepare(`
-        SELECT exam_name, percent, correct, total, created_at 
-        FROM results 
-        WHERE user = ? 
-        ORDER BY id DESC
-    `).all(user);
+    const solvedExams = db.prepare("SELECT * FROM results WHERE user = ? ORDER BY created_at DESC").all(user);
     
     res.json({ generalStats, typeStats, solvedExams });
 });
 
-
-// --- Start Server ---
 app.listen(PORT, () => {
-  console.log(`🚀 Serwer działa na http://localhost:${PORT}`);
+  console.log(`Serwer działa na http://localhost:${PORT}`);
 });
