@@ -152,9 +152,27 @@ main {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* --- Helper Boxes --- */
+.warning-box, .info-box {
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border: 1px solid transparent;
+}
+.warning-box {
+    background-color: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+.info-box {
+    background-color: #eff6ff;
+    border-color: #93c5fd;
+    color: #1e40af;
+}
+
 /* --- Task View --- */
 .task-image { max-width: 100%; border-radius: 8px; border: 1px solid var(--gray-mid); margin-bottom: 15px; }
-
+.task-container { margin-bottom: 30px; }
 .task-options {
     display: flex;
     flex-wrap: wrap;
@@ -192,6 +210,7 @@ main {
 .result-box { margin-top: 20px; padding: 15px; border-radius: 8px; font-weight: bold; }
 .result-box.correct { background-color: #dcfce7; color: #166534; }
 .result-box.incorrect { background-color: #fee2e2; color: #991b1b; }
+.result-box-container { margin-top: 15px; }
 
 /* --- Exam Mode --- */
 #exam-timer {

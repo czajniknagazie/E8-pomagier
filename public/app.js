@@ -14,12 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
             examId: null,
             examName: ''
         },
+        allTasksCache: [], // Cache for all tasks
     };
 
     // DOM Elements
     const loginContainer = document.getElementById('login-container');
     const appContainer = document.getElementById('app-container');
-    const mainContent = document.getElementById('main-content');
+    let mainContent = document.getElementById('main-content');
     
     // --- API HELPER ---
     const api = {
@@ -218,7 +219,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- VIEW RENDERING ---
     async function renderView(view) {
+        // Clear event listeners on mainContent to prevent duplicates
+        const newMainContent = mainContent.cloneNode(false);
+        mainContent.parentNode.replaceChild(newMainContent, mainContent);
+        mainContent = newMainContent;
         mainContent.innerHTML = `<h1>Ładowanie...</h1>`;
+
         switch(view) {
             case 'wszystkie':
             case 'zamkniete':
@@ -242,9 +248,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'exam-start':
                 await renderExamTask();
-                break;
-            case 'exam-review':
-                await renderExamReviewTask();
                 break;
             case 'exam-results':
                 await renderExamResultsView();
@@ -274,35 +277,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             document.getElementById('reset-progress-btn').addEventListener('click', handleResetProgress);
             document.getElementById('practice-incorrect-btn').addEventListener('click', () => {
-                 navigateTo('practice-incorrect');
+                 renderPracticeIncorrectTaskView();
             });
             return;
         }
 
-        let answerHtml = '';
-        if (task.type === 'zamkniete') {
-            answerHtml = `
-                <div class="task-options">
-                    ${task.opcje.map((opt, i) => `
-                        <label><input type="radio" name="answer" value="${opt}"> ${opt}</label>
-                    `).join('')}
-                </div>`;
-        } else { // otwarte
-            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
-        }
-
-        const taskHtml = `
-            <div class="content-box">
-                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
-                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
-                <form id="task-form">
-                    ${answerHtml}
-                    <button type="submit">Sprawdź</button>
-                </form>
-                <div id="result-box"></div>
-            </div>`;
-        mainContent.innerHTML += taskHtml;
-        document.getElementById('task-form').addEventListener('submit', handleCheckAnswer);
+        renderTaskDisplay(task);
     }
     
     async function renderPracticeIncorrectTaskView() {
@@ -317,23 +297,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p><strong>Świetna robota! 💪</strong></p>
                     <p>Przećwiczyłeś/aś wszystkie zadania, w których wcześniej popełniłeś/aś błąd. Wróć do normalnego trybu nauki.</p>
                     <div class="action-buttons">
-                         <button onclick="navigateTo('wszystkie')">Wróć do wszystkich zadań</button>
+                         <button id="back-to-all-tasks">Wróć do wszystkich zadań</button>
                     </div>
                 </div>`;
+            document.getElementById('back-to-all-tasks').addEventListener('click', () => navigateTo('wszystkie'));
             return;
         }
-        // Reszta kodu jest identyczna jak w renderRandomTaskView, więc można ją wywołać
+        
         renderTaskDisplay(task);
     }
     
     function renderTaskDisplay(task) {
         let answerHtml = '';
         if (task.type === 'zamkniete') {
-            answerHtml = `<div class="task-options">${task.opcje.map(opt => `<label><input type="radio" name="answer" value="${opt}"> ${opt}</label>`).join('')}</div>`;
-        } else {
+            answerHtml = `
+                <div class="task-options">
+                    ${task.opcje.map((opt) => `
+                        <label><input type="radio" name="answer" value="${opt}"> ${opt}</label>
+                    `).join('')}
+                </div>`;
+        } else { // otwarte
             answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
         }
-    
+
         const taskHtml = `
             <div class="content-box">
                 <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
@@ -400,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const formButton = document.querySelector('#task-form button[type="submit"]');
         if(formButton) formButton.disabled = true;
 
-
         if (isSelfAssessed) {
             resultBox.innerHTML = `<div class="result-box ${isCorrect ? 'correct' : 'incorrect'}">Dziękujemy za ocenę!</div>`;
         } else {
@@ -429,11 +414,53 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function renderBrowseTasks() {
+        mainContent.innerHTML = '<h1>Przeglądaj wszystkie zadania</h1>';
+        const warningMessage = '<div class="warning-box">Pamiętaj, że postępy w tym trybie nie są zapisywane w Twoim arkuszu osiągnięć.</div>';
+        mainContent.innerHTML += warningMessage;
+        
+        const tasks = await api.request('/tasks');
+        if (tasks) {
+            appState.allTasksCache = tasks;
+            renderScrollableTaskList(tasks, mainContent);
+        } else {
+            mainContent.innerHTML += '<p>Nie udało się załadować zadań.</p>';
+        }
+    }
+
     // Exams List
     async function renderExamsList() {
         const exams = await api.request('/exams');
         let examsHtml = `<ul class="item-list">`;
+        
         if (exams && exams.length) {
+            // --- NEW: Custom sorting logic ---
+            const monthMap = {
+                styczeń: 1, stycznia: 1, luty: 2, lutego: 2, marzec: 3, marca: 3,
+                kwiecień: 4, kwietnia: 4, maj: 5, maja: 5, czerwiec: 6, czerwca: 6,
+                lipiec: 7, lipca: 7, sierpień: 8, sierpnia: 8, wrzesień: 9, września: 9,
+                październik: 10, października: 10, listopad: 11, listopada: 11, grudzień: 12, grudnia: 12
+            };
+            const monthRegex = new RegExp(Object.keys(monthMap).join('|'), 'i');
+
+            exams.sort((a, b) => {
+                const yearA = a.name.match(/\b(\d{4})\b/);
+                const yearB = b.name.match(/\b(\d{4})\b/);
+                const monthA = a.name.match(monthRegex);
+                const monthB = b.name.match(monthRegex);
+
+                const yearNumA = yearA ? parseInt(yearA[1], 10) : 0;
+                const yearNumB = yearB ? parseInt(yearB[1], 10) : 0;
+                const monthNumA = monthA ? monthMap[monthA[0].toLowerCase()] : 0;
+                const monthNumB = monthB ? monthMap[monthB[0].toLowerCase()] : 0;
+
+                if (yearNumA !== yearNumB) {
+                    return yearNumB - yearNumA; // Sort by year descending
+                }
+                return monthNumB - monthNumA; // Sort by month descending
+            });
+            // --- End of sorting logic ---
+
             examsHtml += exams.map(exam => `
                 <li class="list-item">
                     <span><strong>${exam.name}</strong></span>
@@ -455,16 +482,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 const examName = e.target.dataset.examName;
                 const action = e.target.dataset.action;
                 if (action === 'start') {
-                    startExam(examId, examName);
+                    renderExamStartScreen(examId, examName);
                 } else if (action === 'review') {
                     startExamReview(examId, examName);
                 }
             });
         });
     }
+
+    // --- NEW --- Render exam start configuration screen
+    function renderExamStartScreen(examId, examName) {
+        mainContent.innerHTML = `
+            <h1>Rozpocznij Egzamin: ${examName}</h1>
+            <div class="content-box">
+                <p class="info-box">Pamiętaj, że prawdziwy czas na egzaminie to 125 minut.</p>
+                <div class="form-group">
+                    <label for="exam-time-input">Ustaw czas (w minutach, 0 aby pominąć):</label>
+                    <input type="number" id="exam-time-input" value="125" min="0" class="task-input">
+                </div>
+                <div class="action-buttons">
+                    <button id="start-exam-btn">Rozpocznij Egzamin</button>
+                </div>
+            </div>`;
+        
+        document.getElementById('start-exam-btn').addEventListener('click', async () => {
+            const timeInMinutes = parseInt(document.getElementById('exam-time-input').value, 10);
+            await startExam(examId, examName, timeInMinutes);
+        });
+    }
     
-    // Exam Mode
-    async function startExam(examId, examName) {
+    // --- MODIFIED --- Exam Mode
+    async function startExam(examId, examName, timeInMinutes) {
         const examData = await api.request(`/exams/${examId}`);
         if (!examData || !examData.tasks.length) {
             alert('Ten egzamin jest pusty lub nie można go załadować.');
@@ -483,27 +531,28 @@ document.addEventListener('DOMContentLoaded', () => {
             gradedOpenTasks: {}
         };
 
-        const timerDuration = 125 * 60;
-        let timeLeft = timerDuration;
-        
-        appState.examState.timer = setInterval(() => {
-            timeLeft--;
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            const timerEl = document.getElementById('exam-timer');
-            if (timerEl) {
-                timerEl.textContent = `Pozostały czas: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-            if (timeLeft <= 0) {
-                endExam(true);
-            }
-        }, 1000);
+        if (timeInMinutes > 0) {
+            let timeLeft = timeInMinutes * 60;
+            appState.examState.timer = setInterval(() => {
+                timeLeft--;
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                const timerEl = document.getElementById('exam-timer');
+                if (timerEl) {
+                    timerEl.textContent = `Pozostały czas: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+                if (timeLeft <= 0) {
+                    alert("Czas się skończył!");
+                    endExam(true);
+                }
+            }, 1000);
+        }
 
         navigateTo('exam-start');
     }
 
     function renderExamTask() {
-        const { tasks, currentIndex, answers, examName } = appState.examState;
+        const { tasks, currentIndex, answers, examName, timer } = appState.examState;
         const task = tasks[currentIndex];
 
         let answerHtml = '';
@@ -520,7 +569,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const examHtml = `
-            <div id="exam-timer"></div>
+            ${timer ? '<div id="exam-timer">Ładowanie licznika...</div>' : ''}
             <h1>Egzamin: ${examName} (${currentIndex + 1} / ${tasks.length})</h1>
             <div class="content-box">
                 <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
@@ -566,7 +615,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function endExam(isFinished) {
-        clearInterval(appState.examState.timer);
+        if(appState.examState.timer) clearInterval(appState.examState.timer);
+        appState.examState.timer = null;
+
         if (isFinished) {
             saveCurrentExamAnswer();
             
@@ -681,80 +732,111 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('back-to-exams').addEventListener('click', () => navigateTo('egzaminy'));
     }
 
-    // Review Mode
+    // --- MODIFIED --- Review Mode is now a scrollable list
     async function startExamReview(examId, examName) {
         const examData = await api.request(`/exams/${examId}`);
         if (!examData || !examData.tasks.length) {
             alert('Ten egzamin jest pusty lub nie można go załadować.');
             return;
         }
-        appState.examState = { active: true, tasks: examData.tasks, currentIndex: 0, answers: {}, timer: null, examId, examName };
-        navigateTo('exam-review');
+        appState.allTasksCache = examData.tasks;
+        mainContent.innerHTML = `<h1>Przeglądanie Egzaminu: ${examName}</h1>`;
+        const warningMessage = '<div class="warning-box">Pamiętaj, że postępy w tym trybie nie są zapisywane w Twoim arkuszu osiągnięć.</div>';
+        mainContent.innerHTML += warningMessage;
+        renderScrollableTaskList(examData.tasks, mainContent);
     }
     
-    function renderExamReviewTask() {
-        const { tasks, currentIndex, examName } = appState.examState;
-        const task = tasks[currentIndex];
-        let answerHtml = '';
-        if (task.type === 'zamkniete') {
-            answerHtml = `<div class="task-options">${task.opcje.map(opt => `<label><input type="radio" name="answer" value="${opt}">${opt}</label>`).join('')}</div>`;
-        } else {
-            answerHtml = `<textarea id="open-answer" class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
-        }
-        const taskHtml = `
-            <h1>Przeglądanie: ${examName} (${currentIndex + 1} / ${tasks.length})</h1>
-            <div class="content-box">
-                <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
-                <img src="${task.tresc}" alt="Treść zadania" class="task-image">
-                <form id="task-review-form">
-                    ${answerHtml}
-                    <button type="submit">Sprawdź</button>
-                </form>
-                <div id="result-box"></div>
-                <div class="exam-navigation">
-                    <button id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>Poprzednie</button>
-                    <button id="exit-review-btn">Zakończ przegląd</button>
-                    <button id="next-btn" ${currentIndex === tasks.length - 1 ? 'disabled' : ''}>Następne</button>
-                </div>
-            </div>`;
-        mainContent.innerHTML = taskHtml;
-        const form = document.getElementById('task-review-form');
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const task = appState.examState.tasks[appState.examState.currentIndex];
-            let userAnswer;
+    // --- NEW HELPER --- Renders a scrollable list of tasks
+    function renderScrollableTaskList(tasks, container) {
+        const tasksHtml = tasks.map(task => {
+            let answerHtml = '';
             if (task.type === 'zamkniete') {
-                const selected = form.querySelector('input[name="answer"]:checked');
-                userAnswer = selected ? selected.value : '';
+                answerHtml = `<div class="task-options">
+                    ${task.opcje.map(opt => `<label><input type="radio" name="answer-${task.id}" value="${opt}"> ${opt}</label>`).join('')}
+                </div>`;
             } else {
-                userAnswer = form.querySelector('#open-answer').value;
+                answerHtml = `<textarea class="task-input" rows="3" placeholder="Wpisz swoją odpowiedź..."></textarea>`;
             }
+
+            return `
+                <div class="content-box task-container" data-task-id="${task.id}">
+                    <p><strong>Zadanie #${task.id} (${task.punkty} pkt.)</strong></p>
+                    <img src="${task.tresc}" alt="Treść zadania" class="task-image">
+                    <form class="task-check-form">
+                        ${answerHtml}
+                        <button type="submit">Sprawdź</button>
+                    </form>
+                    <div class="result-box-container"></div>
+                </div>`;
+        }).join('');
+        container.innerHTML += tasksHtml;
+        
+        container.addEventListener('submit', handleScrollableTaskCheck);
+    }
+
+    // --- MODIFIED HELPER --- Handles answer checking for scrollable lists, now includes self-assessment
+    function handleScrollableTaskCheck(e) {
+        if (!e.target.classList.contains('task-check-form')) return;
+        e.preventDefault();
+
+        const form = e.target;
+        const taskContainer = form.closest('.task-container');
+        const resultContainer = taskContainer.querySelector('.result-box-container');
+        const taskId = parseInt(taskContainer.dataset.taskId, 10);
+        const task = appState.allTasksCache.find(t => t.id === taskId);
+
+        if (!task) return;
+
+        form.querySelector('button[type="submit"]').disabled = true;
+
+        if (task.type === 'zamkniete') {
+            const selected = form.querySelector(`input[name="answer-${task.id}"]:checked`);
+            if (!selected) {
+                alert('Wybierz odpowiedź!');
+                form.querySelector('button[type="submit"]').disabled = false;
+                return;
+            }
+            const userAnswer = selected.value;
             const isCorrect = userAnswer.trim().toLowerCase() === task.odpowiedz.trim().toLowerCase();
-            showReviewResult(isCorrect, task.odpowiedz);
-            form.querySelector('button[type="submit"]').disabled = true;
-        });
-        document.getElementById('prev-btn').addEventListener('click', () => navigateExamReview(-1));
-        document.getElementById('next-btn').addEventListener('click', () => navigateExamReview(1));
-        document.getElementById('exit-review-btn').addEventListener('click', () => {
-            appState.examState.active = false;
-            navigateTo('egzaminy');
-        });
-    }
+            
+            let resultHtml;
+            if (isCorrect) {
+                resultHtml = `<div class="result-box correct">🎉 Dobrze!</div>`;
+            } else {
+                let text = `Błędna odpowiedź.`;
+                if (task.odpowiedz) text += ` Poprawna to: <strong>${task.odpowiedz}</strong>`;
+                resultHtml = `<div class="result-box incorrect">${text}</div>`;
+            }
+            resultContainer.innerHTML = resultHtml;
 
-    function navigateExamReview(direction) {
-        const newIndex = appState.examState.currentIndex + direction;
-        if (newIndex >= 0 && newIndex < appState.examState.tasks.length) {
-            appState.examState.currentIndex = newIndex;
-            renderExamReviewTask();
-        }
-    }
+        } else { // otwarte
+            const userAnswer = form.querySelector('textarea').value;
+            if (!userAnswer) {
+                alert('Wpisz odpowiedź!');
+                form.querySelector('button[type="submit"]').disabled = false;
+                return;
+            }
 
-    function showReviewResult(isCorrect, correctAnswer) {
-        const resultBox = document.getElementById('result-box');
-        if (isCorrect) {
-            resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
-        } else {
-            resultBox.innerHTML = `<div class="result-box incorrect">Błędna odpowiedź. Poprawna to: <strong>${correctAnswer}</strong></div>`;
+            resultContainer.innerHTML = `
+                <div class="result-box">
+                    <p><strong>Twoja odpowiedź:</strong></p>
+                    <pre class="user-answer-box">${userAnswer}</pre>
+                    <p><strong>Poprawna odpowiedź:</strong></p>
+                    <pre class="correct-answer-box">${task.odpowiedz}</pre>
+                    <p>Oceń swoją odpowiedź:</p>
+                    <div class="grading-buttons">
+                        <button class="grade-btn correct" data-correct="true">👍 Było dobrze</button>
+                        <button class="grade-btn incorrect" data-correct="false">👎 Było źle</button>
+                    </div>
+                </div>
+            `;
+            
+            resultContainer.querySelectorAll('.grade-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const isCorrect = btn.dataset.correct === 'true';
+                    resultContainer.innerHTML = `<div class="result-box ${isCorrect ? 'correct' : 'incorrect'}">Dziękujemy za ocenę!</div>`;
+                });
+            });
         }
     }
 
@@ -1033,27 +1115,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleDeleteTask(e) {
         const taskId = e.target.dataset.id;
         if (confirm(`Czy na pewno chcesz usunąć zadanie #${taskId}?`)) {
-            const result = await api.request(`/tasks/${taskId}`, 'DELETE');
-            if (result !== null) {
-                alert(`Zadanie #${taskId} zostało usunięte.`);
-                navigateTo('admin-zadania');
-            }
+            await api.request(`/tasks/${taskId}`, 'DELETE');
+            alert(`Zadanie #${taskId} zostało usunięte.`);
+            navigateTo('admin-zadania');
         }
     }
     
     // Admin Exams
     async function renderAdminExams() {
-        const exams = await api.request('/exams');
-        const tasks = await api.request('/tasks');
+        const [exams, tasks] = await Promise.all([api.request('/exams'), api.request('/tasks')]);
+
         let examsHtml = `<div class="content-box wide">
             <h2>Utwórz nowy arkusz egzaminacyjny</h2>
             <form id="create-exam-form">
-                <input type="text" id="new-exam-name" placeholder="Nazwa egzaminu" required>
-                <input type="text" id="new-exam-arkusz" placeholder="Nazwa arkusza (np. E8-2023)" required>
+                <div class="form-group">
+                    <label for="new-exam-name">Nazwa egzaminu:</label>
+                    <input type="text" id="new-exam-name" placeholder="np. Egzamin Ósmoklasisty 2024 Czerwiec" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-exam-arkusz">Nazwa arkusza:</label>
+                    <input type="text" id="new-exam-arkusz" placeholder="np. E8-2024-06" required>
+                </div>
                 <h3>Wybierz zadania z listy:</h3>
                 <div class="task-list-container">
                     <ul id="exam-tasks-list" class="item-list">
-                        ${tasks.map(task => `
+                        ${tasks ? tasks.map(task => `
                             <li class="list-item task-list-item">
                                 <input type="checkbox" value="${task.id}" id="task-check-${task.id}" style="transform: scale(1.5); margin-right: 15px;">
                                 <img src="${task.tresc}" alt="Miniatura">
@@ -1062,10 +1148,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
                                 </label>
                             </li>
-                        `).join('')}
+                        `).join('') : '<li>Brak zadań do wyświetlenia.</li>'}
                     </ul>
                 </div>
-                <button type="submit">Utwórz egzamin</button>
+                <button type="submit" style="margin-top: 20px;">Utwórz egzamin</button>
             </form>
         </div>`;
         
@@ -1112,11 +1198,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleDeleteExam(e) {
         const examId = e.target.dataset.id;
         if (confirm(`Czy na pewno chcesz usunąć egzamin #${examId}? Zmiana jest nieodwracalna.`)) {
-            const result = await api.request(`/exams/${examId}`, 'DELETE');
-            if (result !== null) {
-                alert(`Egzamin #${examId} został usunięty.`);
-                navigateTo('admin-egzaminy');
-            }
+            await api.request(`/exams/${examId}`, 'DELETE');
+            alert(`Egzamin #${examId} został usunięty.`);
+            navigateTo('admin-egzaminy');
         }
     }
 

@@ -56,7 +56,6 @@ app.post("/api/admin/login", (req, res) => {
   const token = signToken(name, "admin");
   res.json({ token, role: "admin", name });
 });
-
 // --- Tasks ---
 app.get("/api/tasks", auth(), (req, res) => {
     const { search = '' } = req.query;
@@ -91,7 +90,7 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     } else {
       // Standardowy tryb, pobierz losowe zadanie, które nie zostało rozwiązane
       query = `
-          SELECT * FROM tasks
+           SELECT * FROM tasks
           WHERE id NOT IN (SELECT task_id FROM solved WHERE user = ?)
       `;
       if (type === 'zamkniete' || type === 'otwarte') {
@@ -125,7 +124,6 @@ app.post("/api/solved", auth(), (req, res) => {
     res.status(400).json({ error: e.message });
   }
 });
-
 // NOWOŚĆ: Endpoint do resetowania postępów
 app.delete("/api/solved", auth(), (req, res) => {
   const user = req.user.name;
@@ -136,7 +134,6 @@ app.delete("/api/solved", auth(), (req, res) => {
     res.status(500).json({ error: "Błąd serwera podczas resetowania postępów: " + e.message });
   }
 });
-
 // --- Image Upload ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
@@ -155,7 +152,6 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   }));
   res.json({ success: true, files });
 });
-
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   const { tasks } = req.body || {};
@@ -178,7 +174,6 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
   trx(tasks);
   res.json({ success: true, count: tasks.length });
 });
-
 // --- Usuwanie zadań ---
 app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
     const { id } = req.params;
@@ -193,10 +188,9 @@ app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
 // --- Exams ---
 app.get("/api/exams", auth(), (req, res) => {
-  const list = db.prepare("SELECT id, name FROM exams ORDER BY name ASC").all();
+  const list = db.prepare("SELECT id, name, tasks FROM exams ORDER BY id DESC").all();
   res.json(list);
 });
 app.get("/api/exams/:id", auth(), (req, res) => {
@@ -244,7 +238,6 @@ app.delete("/api/exams/:id", auth("admin"), (req, res) => {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
 });
-
 // --- Results ---
 // Zaktualizowany endpoint, który przyjmuje więcej danych o wynikach
 app.post("/api/results", auth(), (req, res) => {
@@ -254,10 +247,9 @@ app.post("/api/results", auth(), (req, res) => {
           .run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent));
         res.json({ success: true });
     } catch (e) {
-        res.status(400).json({ error: e.message });
+         res.status(400).json({ error: e.message });
     }
 });
-
 app.get("/api/stats", auth(), (req, res) => {
     const user = req.user.name;
 
@@ -289,7 +281,6 @@ app.get("/api/stats", auth(), (req, res) => {
 
     res.json({ generalStats, typeStats: formattedTypeStats, solvedExams });
 });
-
 // --- Start Server ---
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
