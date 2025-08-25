@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showLogin();
         }
+        setupFooterToggle(); // Dodano wywołanie funkcji stopki
     }
 
     // --- AUTH & UI TOGGLING ---
@@ -206,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    function navigateTo(view) {
+    function navigateTo(view, params = null) {
         if (appState.examState.active && !view.startsWith('exam-')) {
             if (!confirm('Czy na pewno chcesz opuścić egzamin? Twoje postępy nie zostaną zapisane.')) {
                 return;
@@ -214,11 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
             endExam(false);
         }
         appState.currentView = view;
-        renderView(view);
+        renderView(view, params);
     }
 
     // --- VIEW RENDERING ---
-    async function renderView(view) {
+    async function renderView(view, params = null) {
         // Clear event listeners on mainContent to prevent duplicates
         const newMainContent = mainContent.cloneNode(false);
         mainContent.parentNode.replaceChild(newMainContent, mainContent);
@@ -242,6 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'admin-zadania':
                 if (appState.user.role === 'admin') await renderAdminTasks();
+                break;
+            case 'admin-edytuj-zadanie':
+                if (appState.user.role === 'admin') await renderAdminEditTask(params);
                 break;
             case 'admin-egzaminy':
                  if (appState.user.role === 'admin') await renderAdminExams();
@@ -363,20 +367,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     <pre class="user-answer-box">${userAnswer}</pre>
                     <p><strong>Poprawna odpowiedź:</strong></p>
                     <pre class="correct-answer-box">${task.odpowiedz}</pre>
-                    <p>Oceń swoją odpowiedź:</p>
-                    <div class="grading-buttons">
-                        <button id="self-assess-correct" class="correct">👍 Było dobrze</button>
-                        <button id="self-assess-incorrect" class="incorrect">👎 Było źle</button>
-                    </div>
+                    <p>Oceń swoją odpowiedź (0 - ${task.punkty} pkt):</p>
+                    <form id="self-assess-form">
+                        <input type="number" id="self-assess-points" min="0" max="${task.punkty}" value="0" style="width: 100px; margin-right: 10px;">
+                        <button type="submit">Oceń</button>
+                    </form>
                 </div>
             `;
-            document.getElementById('self-assess-correct').addEventListener('click', () => {
-                showResult(true, null, true);
-                api.request('/solved', 'POST', { taskId: task.id, isCorrect: true });
-            });
-            document.getElementById('self-assess-incorrect').addEventListener('click', () => {
-                showResult(false, null, true);
-                api.request('/solved', 'POST', { taskId: task.id, isCorrect: false });
+
+            document.getElementById('self-assess-form').addEventListener('submit', (ev) => {
+                ev.preventDefault();
+                const points = parseInt(document.getElementById('self-assess-points').value, 10);
+                if (isNaN(points) || points < 0 || points > task.punkty) {
+                    alert(`Wpisz poprawną liczbę punktów (od 0 do ${task.punkty}).`);
+                    return;
+                }
+                // Zapisz jako "poprawne" tylko przy maksymalnej liczbie punktów
+                const isConsideredCorrect = (points === task.punkty);
+                api.request('/solved', 'POST', { taskId: task.id, isCorrect: isConsideredCorrect });
+                showResult(true, null, true); // Zmieniono, aby zawsze pokazywało neutralny komunikat po ocenie
             });
         }
     }
@@ -387,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(formButton) formButton.disabled = true;
 
         if (isSelfAssessed) {
-            resultBox.innerHTML = `<div class="result-box ${isCorrect ? 'correct' : 'incorrect'}">Dziękujemy za ocenę!</div>`;
+            resultBox.innerHTML = `<div class="result-box correct">Dziękujemy za ocenę! Twoja odpowiedź została zapisana.</div>`;
         } else {
             if (isCorrect) {
                 resultBox.innerHTML = `<div class="result-box correct">🎉 Dobrze!</div>`;
@@ -401,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
         resultBox.innerHTML += `<button id="next-task-btn">Następne zadanie</button>`;
         document.getElementById('next-task-btn').addEventListener('click', () => renderView(appState.currentView));
     }
+
 
     async function handleResetProgress() {
         const isConfirmed = confirm("Czy na pewno chcesz zresetować swoje postępy? Wszystkie rozwiązane zadania zostaną oznaczone jako nierozwiązane, ale Twoje wyniki z egzaminów pozostaną nietknięte.");
@@ -816,27 +826,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 form.querySelector('button[type="submit"]').disabled = false;
                 return;
             }
-
+            // W trybie przeglądania nie ma oceniania punktowego, tylko pokazanie odpowiedzi
             resultContainer.innerHTML = `
                 <div class="result-box">
                     <p><strong>Twoja odpowiedź:</strong></p>
                     <pre class="user-answer-box">${userAnswer}</pre>
                     <p><strong>Poprawna odpowiedź:</strong></p>
                     <pre class="correct-answer-box">${task.odpowiedz}</pre>
-                    <p>Oceń swoją odpowiedź:</p>
-                    <div class="grading-buttons">
-                        <button class="grade-btn correct" data-correct="true">👍 Było dobrze</button>
-                        <button class="grade-btn incorrect" data-correct="false">👎 Było źle</button>
-                    </div>
                 </div>
             `;
-            
-            resultContainer.querySelectorAll('.grade-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const isCorrect = btn.dataset.correct === 'true';
-                    resultContainer.innerHTML = `<div class="result-box ${isCorrect ? 'correct' : 'incorrect'}">Dziękujemy za ocenę!</div>`;
-                });
-            });
         }
     }
 
@@ -930,9 +928,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ADMIN VIEWS ---
     
-    // Admin Tasks
     async function renderAdminTasks() {
         const tasks = await api.request('/tasks');
+        appState.allTasksCache = tasks || []; // Zapisz zadania w cache do edycji
         let tasksHtml = `
             <div class="content-box wide">
                 <h2>Istniejące zadania</h2>
@@ -947,6 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
                     </div>
                     <div class="action-buttons">
+                        <button class="edit-task-btn" data-id="${task.id}">Edytuj</button>
                         <button class="delete-task-btn" data-id="${task.id}">Usuń</button>
                     </div>
                 </li>
@@ -989,7 +988,11 @@ document.addEventListener('DOMContentLoaded', () => {
         mainContent.innerHTML = `<h1>Panel Administracyjny: Zarządzanie zadaniami</h1>${tasksHtml}`;
         
         document.querySelectorAll('.delete-task-btn').forEach(btn => btn.addEventListener('click', handleDeleteTask));
-        
+        document.querySelectorAll('.edit-task-btn').forEach(btn => btn.addEventListener('click', (e) => {
+            const taskId = e.target.dataset.id;
+            navigateTo('admin-edytuj-zadanie', { taskId });
+        }));
+
         const step1 = document.getElementById('upload-step-1');
         const step2 = document.getElementById('upload-step-2');
         const typeSelect = document.getElementById('task-type-select');
@@ -1006,7 +1009,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const isClosed = typeSelect.value === 'zamkniete';
 
-            // 1. Utwórz wszystkie "placeholdery" HTML w odpowiedniej kolejności
             const placeholdersHtml = files.map((file, index) => `
                 <div class="task-preview-item" data-file-index="${index}">
                     <img src="" class="task-preview-image" alt="Ładowanie podglądu..." data-index="${index}">
@@ -1030,7 +1032,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `).join('');
             previewsContainer.innerHTML = placeholdersHtml;
 
-            // 2. Wczytaj obrazy do placeholderów, zachowując kolejność
             files.forEach((file, index) => {
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -1079,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const task = {
                     type: type,
-                    tresc: uploaded.files[index].url, // Użyj indeksu, aby zagwarantować kolejność
+                    tresc: uploaded.files[index].url,
                     odpowiedz: answer,
                     punkty: parseInt(pointsInput.value) || 1,
                     opcje: null
@@ -1120,8 +1121,70 @@ document.addEventListener('DOMContentLoaded', () => {
             navigateTo('admin-zadania');
         }
     }
-    
-    // Admin Exams
+
+    async function renderAdminEditTask(params) {
+        const taskId = params.taskId;
+        const task = appState.allTasksCache.find(t => t.id == taskId);
+        if (!task) {
+            alert("Nie znaleziono zadania!");
+            navigateTo('admin-zadania');
+            return;
+        }
+
+        const isClosed = task.type === 'zamkniete';
+        const optionsValue = isClosed ? (task.opcje || []).join(';') : '';
+
+        mainContent.innerHTML = `
+            <h1>Edycja zadania #${task.id}</h1>
+            <div class="content-box wide">
+                <form id="edit-task-form">
+                    <img src="${task.tresc}" class="task-preview-image" alt="Podgląd zadania">
+                    <div class="form-group">
+                        <label for="edit-task-answer">Odpowiedź:</label>
+                        <input type="text" id="edit-task-answer" value="${task.odpowiedz || ''}" required>
+                    </div>
+                     <div class="form-group">
+                        <label for="edit-task-points">Punkty:</label>
+                        <input type="number" id="edit-task-points" value="${task.punkty}" required>
+                    </div>
+                    ${isClosed ? `
+                    <div class="form-group">
+                        <label for="edit-task-options">Opcje (oddzielone średnikiem ";"):</label>
+                        <input type="text" id="edit-task-options" value="${optionsValue}">
+                    </div>
+                    ` : ''}
+                    <div class="action-buttons">
+                        <button type="submit">Zapisz zmiany</button>
+                        <button type="button" id="cancel-edit-btn">Anuluj</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        document.getElementById('cancel-edit-btn').addEventListener('click', () => navigateTo('admin-zadania'));
+        document.getElementById('edit-task-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const odpowiedz = document.getElementById('edit-task-answer').value;
+            const punkty = parseInt(document.getElementById('edit-task-points').value, 10);
+            let opcje = null;
+
+            if (isClosed) {
+                opcje = document.getElementById('edit-task-options').value.split(';').map(o => o.trim()).filter(Boolean);
+                if (opcje.length === 0) {
+                    alert("Zadania zamknięte muszą mieć opcje odpowiedzi.");
+                    return;
+                }
+            }
+
+            const result = await api.request(`/tasks/${task.id}`, 'PUT', { odpowiedz, punkty, opcje });
+            if (result && result.success) {
+                alert("Zadanie zostało zaktualizowane.");
+                navigateTo('admin-zadania');
+            }
+        });
+    }
+
     async function renderAdminExams() {
         const [exams, tasks] = await Promise.all([api.request('/exams'), api.request('/tasks')]);
 
@@ -1162,7 +1225,10 @@ document.addEventListener('DOMContentLoaded', () => {
             examsHtml += exams.map(exam => `
                 <li class="list-item">
                     <span><strong>${exam.name}</strong> (${JSON.parse(exam.tasks || '[]').length} zadań)</span>
-                    <button class="delete-exam-btn" data-id="${exam.id}">Usuń</button>
+                    <div class="action-buttons">
+                        <button class="edit-exam-btn" data-id="${exam.id}" data-name="${exam.name}">Edytuj</button>
+                        <button class="delete-exam-btn" data-id="${exam.id}">Usuń</button>
+                    </div>
                 </li>
             `).join('');
         } else {
@@ -1174,6 +1240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
         document.querySelectorAll('.delete-exam-btn').forEach(btn => btn.addEventListener('click', handleDeleteExam));
+        document.querySelectorAll('.edit-exam-btn').forEach(btn => btn.addEventListener('click', handleEditExam));
     }
 
     async function handleCreateExam(e) {
@@ -1195,12 +1262,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleEditExam(e) {
+        const examId = e.target.dataset.id;
+        const currentName = e.target.dataset.name;
+        const newName = prompt("Wprowadź nową nazwę dla egzaminu:", currentName);
+
+        if (newName && newName.trim() !== '' && newName !== currentName) {
+            const result = await api.request(`/exams/${examId}`, 'PUT', { name: newName });
+            if (result && result.success) {
+                alert("Nazwa egzaminu została zaktualizowana.");
+                navigateTo('admin-egzaminy');
+            }
+        }
+    }
+
     async function handleDeleteExam(e) {
         const examId = e.target.dataset.id;
         if (confirm(`Czy na pewno chcesz usunąć egzamin #${examId}? Zmiana jest nieodwracalna.`)) {
             await api.request(`/exams/${examId}`, 'DELETE');
             alert(`Egzamin #${examId} został usunięty.`);
             navigateTo('admin-egzaminy');
+        }
+    }
+
+    // NOWOŚĆ: Funkcja do obsługi zwijanej stopki
+    function setupFooterToggle() {
+        const helpButton = document.getElementById('help-button');
+        const footerContent = document.getElementById('footer-content');
+        const collapseButton = document.getElementById('collapse-footer-btn');
+
+        if (helpButton && footerContent && collapseButton) {
+            helpButton.addEventListener('click', () => {
+                helpButton.classList.add('hidden');
+                footerContent.classList.remove('hidden');
+            });
+
+            collapseButton.addEventListener('click', () => {
+                footerContent.classList.add('hidden');
+                helpButton.classList.remove('hidden');
+            });
         }
     }
 

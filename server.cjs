@@ -30,13 +30,13 @@ function signToken(name, role) {
 function auth(requiredRole = null) {
   return (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Brak tokena" });
+if (!token) return res.status(401).json({ error: "Brak tokena" });
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (requiredRole && decoded.role !== requiredRole) return res.status(403).json({ error: "Brak uprawnień" });
+if (requiredRole && decoded.role !== requiredRole) return res.status(403).json({ error: "Brak uprawnień" });
       req.user = decoded;
       next();
-    } catch {
+} catch {
       res.status(401).json({ error: "Błędny token" });
     }
   };
@@ -67,9 +67,35 @@ app.get("/api/tasks", auth(), (req, res) => {
     }
     query += ' ORDER BY id DESC';
     const tasks = db.prepare(query).all(params).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null
-    }));
+ 
+   }));
     res.json(tasks);
 });
+
+// NOWOŚĆ: Edycja zadania
+app.put("/api/tasks/:id", auth("admin"), (req, res) => {
+    const { id } = req.params;
+    const { odpowiedz, punkty, opcje } = req.body;
+
+    if (!odpowiedz || punkty === undefined) {
+        return res.status(400).json({ error: "Brak wszystkich wymaganych danych (odpowiedz, punkty)." });
+    }
+
+    try {
+        const stmt = db.prepare("UPDATE tasks SET odpowiedz = ?, punkty = ?, opcje = ? WHERE id = ?");
+        const opcjeJson = opcje ? JSON.stringify(opcje) : null;
+        const info = stmt.run(odpowiedz, Number(punkty), opcjeJson, id);
+
+        if (info.changes > 0) {
+            res.json({ success: true, message: "Zadanie zaktualizowane." });
+        } else {
+            res.status(404).json({ error: "Nie znaleziono zadania." });
+        }
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
+});
+
 
 app.get("/api/tasks/random", auth(), (req, res) => {
     const { type, incorrect } = req.query; // Dodano parametr `incorrect`
@@ -81,7 +107,8 @@ app.get("/api/tasks/random", auth(), (req, res) => {
       query = `
           SELECT T.* FROM tasks T
           INNER JOIN solved S ON T.id = S.task_id
-          WHERE S.user = ? AND S.is_correct = 0
+ 
+         WHERE S.user = ? AND S.is_correct = 0
       `;
       if (type === 'zamkniete' || type === 'otwarte') {
           query += ' AND T.type = ?';
@@ -90,7 +117,8 @@ app.get("/api/tasks/random", auth(), (req, res) => {
     } else {
       // Standardowy tryb, pobierz losowe zadanie, które nie zostało rozwiązane
       query = `
-           SELECT * FROM tasks
+   
+        SELECT * FROM tasks
           WHERE id NOT IN (SELECT task_id FROM solved WHERE user = ?)
       `;
       if (type === 'zamkniete' || type === 'otwarte') {
@@ -99,12 +127,13 @@ app.get("/api/tasks/random", auth(), (req, res) => {
       }
     }
     
-    query += ' ORDER BY RANDOM() LIMIT 1';
+    // POPRAWIONY KOD
+query += ' ORDER BY RANDOM() LIMIT 1';
     
     const task = db.prepare(query).get(params);
-    if (task) {
+if (task) {
         task.opcje = task.opcje ? JSON.parse(task.opcje) : null;
-    }
+}
     res.json(task || null);
 });
 
@@ -119,7 +148,8 @@ app.post("/api/solved", auth(), (req, res) => {
       VALUES (?, ?, ?)
     `);
     stmt.run(req.user.name, Number(taskId), isCorrect ? 1 : 0);
-    res.json({ success: true });
+ 
+   res.json({ success: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -165,7 +195,8 @@ app.post("/api/tasks/bulk", auth("admin"), (req, res) => {
         type: t.type,
         tresc: t.tresc,
         odpowiedz: t.odpowiedz,
-        opcje: t.opcje ? JSON.stringify(t.opcje) : null,
+ 
+       opcje: t.opcje ? JSON.stringify(t.opcje) : null,
         punkty: Number(t.punkty) || 1,
       });
     }
@@ -183,7 +214,8 @@ app.delete("/api/tasks/:id", auth("admin"), (req, res) => {
             res.status(204).send(); // Sukces, brak treści
         } else {
             res.status(404).json({ error: "Zadanie nie znaleziono." });
-        }
+     
+   }
     } catch (e) {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
@@ -203,6 +235,25 @@ app.get("/api/exams/:id", auth(), (req, res) => {
   const tasks = db.prepare(q).all(ids).map(t => ({ ...t, opcje: t.opcje ? JSON.parse(t.opcje) : null }));
   res.json({ id: exam.id, name: exam.name, tasks: tasks });
 });
+
+// NOWOŚĆ: Edycja nazwy egzaminu
+app.put("/api/exams/:id", auth("admin"), (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: "Brak nowej nazwy." });
+    try {
+        const info = db.prepare("UPDATE exams SET name = ? WHERE id = ?").run(name, id);
+        if (info.changes > 0) {
+            res.json({ success: true, message: "Nazwa egzaminu zaktualizowana." });
+        } else {
+            res.status(404).json({ error: "Nie znaleziono egzaminu." });
+        }
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
+});
+
+
 app.post("/api/exams", auth("admin"), (req, res) => {
   const { name, taskIds, arkuszName } = req.body || {};
   if (!name || !Array.isArray(taskIds) || !taskIds.length) {
@@ -214,7 +265,8 @@ app.post("/api/exams", auth("admin"), (req, res) => {
     for (const taskId of taskIds) {
       updateStmt.run(arkuszName, taskId);
     }
-    return examInfo;
+    return 
+examInfo;
   });
   try {
     const info = dbTransaction();
@@ -233,7 +285,8 @@ app.delete("/api/exams/:id", auth("admin"), (req, res) => {
             res.status(204).send(); // Sukces, brak treści
         } else {
             res.status(404).json({ error: "Egzamin nie znaleziono." });
-        }
+     
+   }
     } catch (e) {
         res.status(500).json({ error: "Błąd serwera: " + e.message });
     }
@@ -247,7 +300,8 @@ app.post("/api/results", auth(), (req, res) => {
           .run(req.user.name, Number(examId), examName, Number(correct), Number(wrong), Number(total), Number(percent));
         res.json({ success: true });
     } catch (e) {
-         res.status(400).json({ error: e.message });
+    
+     res.status(400).json({ error: e.message });
     }
 });
 app.get("/api/stats", auth(), (req, res) => {
@@ -258,7 +312,8 @@ app.get("/api/stats", auth(), (req, res) => {
             COUNT(s.id) as total_solved,
             SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as total_correct,
             SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as total_wrong
-        FROM solved s WHERE s.user = ?
+        FROM solved s WHERE 
+s.user = ?
     `).get(user);
 
     const typeStats = db.prepare(`
@@ -267,7 +322,8 @@ app.get("/api/stats", auth(), (req, res) => {
             SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as correct,
             SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as wrong
         FROM solved s
-        JOIN tasks t ON s.task_id = t.id
+        JOIN tasks 
+t ON s.task_id = t.id
         WHERE s.user = ?
         GROUP BY t.type
     `).all(user);
@@ -276,7 +332,7 @@ app.get("/api/stats", auth(), (req, res) => {
 
     const formattedTypeStats = typeStats.reduce((acc, curr) => {
         acc[curr.type] = { correct: curr.correct, wrong: curr.wrong };
-        return acc;
+return acc;
     }, {});
 
     res.json({ generalStats, typeStats: formattedTypeStats, solvedExams });
@@ -296,7 +352,8 @@ app.listen(PORT, () => {
       tresc TEXT NOT NULL,
       odpowiedz TEXT,
       opcje TEXT,
-      punkty INTEGER DEFAULT 1,
+ 
+     punkty INTEGER DEFAULT 1,
       arkusz TEXT
     );
 
@@ -310,7 +367,8 @@ app.listen(PORT, () => {
       user TEXT NOT NULL,
       task_id INTEGER NOT NULL,
       is_correct INTEGER NOT NULL,
-      PRIMARY KEY (user, task_id)
+  
+    PRIMARY KEY (user, task_id)
     );
 
     CREATE TABLE IF NOT EXISTS results (
@@ -322,7 +380,8 @@ app.listen(PORT, () => {
       wrong INTEGER NOT NULL,
       total INTEGER NOT NULL,
       percent REAL NOT NULL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      
+timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
 });
