@@ -25,6 +25,20 @@ body {
     overflow: hidden;
 }
 
+/* NOWE style dla trybu pełnoekranowego */
+body.games-mode-active nav,
+body.games-mode-active footer {
+    display: none;
+}
+body.games-mode-active main {
+    padding: 0;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+}
+/* ==================================== */
+
+
 @keyframes gradient {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
@@ -227,6 +241,12 @@ main {
     z-index: 1000;
     color: var(--nav-bg);
 }
+#exam-timer.dark {
+    background-color: rgba(0,0,0,0.5);
+    color: var(--green);
+    border: 1px solid var(--green);
+}
+
 .exam-navigation { display: flex; justify-content: space-between; margin-top: 20px; }
 .user-answer-box, .correct-answer-box {
     padding: 15px; border-radius: 8px; margin-bottom: 10px;
@@ -364,26 +384,194 @@ footer {
     padding: 2px 8px;
 }
 
+/* === NOWE I ZAKTUALIZOWANE STYLE TRYBU GIER === */
+.games-background {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background-color: #000;
+}
+.games-background canvas { display: block; }
+
+.games-content {
+    display: flex; flex-direction: row;
+    height: 100%; width: 100%; padding: 20px; box-sizing: border-box;
+    position: relative; z-index: 1; color: #fff; gap: 20px;
+}
+.games-content.games-task-view-mode { justify-content: center; align-items: center; }
+
+/* Panel statystyk gracza (lewa strona) */
+.games-player-stats-panel {
+    width: 350px; min-width: 300px; background-color: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
+    padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+    overflow-y: auto;
+}
+.games-player-stats-panel h2 { margin: 0 0 10px 0; text-align: center; color: var(--green); border-bottom: 1px solid var(--green); padding-bottom: 10px; }
+.games-player-stats-panel h3 { text-align: center; margin: 5px 0 15px; }
+.games-player-stats-panel .stat-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 0.9em; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.games-player-stats-panel .stat-item span:first-child { color: #aaa; }
+.games-player-stats-panel .stat-item .value { font-weight: bold; }
+
+.games-main-section {
+    flex-grow: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+}
+
+.games-main-buttons { display: flex; flex-direction: column; gap: 15px; align-items: center; }
+.games-main-buttons button {
+    width: 280px; padding: 15px; font-size: 1.2rem; font-weight: bold; background-color: transparent;
+    border: 2px solid var(--white); border-radius: 10px; color: var(--white);
+    transition: background-color 0.3s, transform 0.2s;
+}
+.games-main-buttons button:hover {
+    background-color: var(--green); border-color: var(--green); color: #000; transform: scale(1.05);
+}
+#exit-games-mode-btn { border-color: var(--red); color: var(--red); margin-top: 20px; }
+#exit-games-mode-btn:hover { background: var(--red); color: var(--white); }
+
+.games-leaderboard-section {
+    width: 350px; min-width: 300px; background-color: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
+    padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); display: flex; flex-direction: column;
+}
+.games-leaderboard-section h2 { color: #fff; text-align: center; border-bottom: 1px solid var(--green); padding-bottom: 10px; margin-top: 0; }
+.games-leaderboard-section table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.games-leaderboard-section th, .games-leaderboard-section td { padding: 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.games-leaderboard-section th { font-weight: bold; color: var(--green); }
+.games-leaderboard-section tr:hover { background-color: rgba(255,255,255,0.05); }
+
+.games-stats-btn { margin-top: auto; padding: 10px; font-weight: bold; background-color: #000; color: var(--white); border: 2px solid var(--white); border-radius: 8px; cursor: pointer; transition: background-color 0.3s; }
+.games-stats-btn:hover { background-color: var(--white); color: #000; }
+#stats-view-container h3 { text-align: center; color: var(--green); margin-top: 20px; }
+
+#games-exams-container { width: 100%; max-height: 70vh; overflow-y: auto; padding-right: 10px; }
+.games-exams-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.games-exam-item {
+    width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid #888; color: #fff;
+    padding: 15px; text-align: center; font-size: 1rem;
+}
+.games-exam-item:hover { background: rgba(0, 255, 0, 0.1); border-color: var(--green); }
+
+
+@media (max-width: 1024px) {
+    .games-content { flex-direction: column; overflow-y: auto; }
+    .games-player-stats-panel, .games-leaderboard-section { width: 100%; max-height: 400px; }
+    .games-player-stats-panel { order: -1; } /* Statystyki gracza na górze */
+    .games-leaderboard-section { order: 1; } /* Liderzy na dole */
+    .games-main-section { padding: 40px 0; order: 0; }
+}
 
 @media (max-width: 800px) {
-    body { overflow: auto; }
+    body:not(.games-mode-active) { overflow: auto; }
     #app-container { flex-direction: column; }
-    nav {
-        position: fixed; top: 0; left: 0; height: 100%;
-        transform: translateX(-100%); z-index: 999;
-    }
+    nav { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); z-index: 999; }
     nav.nav-visible { transform: translateX(0); }
     .menu-toggle-btn { display: flex; }
-    #menu-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5); z-index: 998;
-    }
+    #menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998; }
     main { padding-top: 80px; }
-    #exam-timer {
-        top: 20px;
-        right: 20px;
-        left: auto;
-        font-size: 1.1rem;
-        padding: 8px 12px;
+    #exam-timer { top: 20px; right: 20px; left: auto; font-size: 1.1rem; padding: 8px 12px; }
+}
+
+/* --- Style dla widoku zadania i egzaminu w trybie gier --- */
+.games-task-box {
+    width: 100%; max-width: 800px; margin: auto; background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px; padding: 25px; color: #fff; text-align: center; position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+.games-task-box h1 { color: var(--green); }
+
+.games-back-button {
+    position: absolute; top: 15px; left: 15px; background: transparent; border: 1px solid #fff;
+    color: #fff; padding: 5px 10px; font-size: 0.9rem;
+}
+.games-back-button:hover { background: #fff; color: #000; }
+.games-task-box .task-header { font-size: 1.1rem; color: #aaa; margin-bottom: 15px; }
+.games-task-box .task-image { max-width: 100%; border-radius: 8px; border: 1px solid #555; margin-bottom: 20px; }
+.games-task-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 15px 0 20px 0; }
+.games-task-options label {
+    display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem;
+    padding: 10px 15px; min-width: 40px; border-radius: 8px; border: 1px solid #888;
+    background-color: transparent; cursor: pointer; transition: all 0.2s;
+}
+.games-task-options label:hover { border-color: var(--green); background-color: rgba(0, 255, 0, 0.1); }
+.games-task-options label:has(input:checked) { background-color: var(--green); border-color: var(--green); color: #000; font-weight: bold; }
+.games-task-textarea {
+    width: calc(100% - 24px); padding: 12px; margin-bottom: 15px; border-radius: 8px;
+    border: 1px solid #888; font-size: 1rem; background-color: rgba(0, 0, 0, 0.2); color: #fff;
+}
+.games-task-button {
+    font-family: inherit; background-color: var(--green); color: #000; border: none; padding: 12px 25px;
+    border-radius: 8px; cursor: pointer; font-size: 1.1rem; font-weight: bold;
+    transition: background-color 0.3s; margin-top: 10px;
+}
+.games-task-button:hover { background-color: #86efac; }
+.games-task-button:disabled { background-color: #555; cursor: not-allowed; }
+
+.games-result-box { margin-top: 20px; padding: 15px; border-radius: 8px; font-weight: bold; }
+.games-result-box .result-box.correct { background-color: #dcfce7; color: #166534; }
+.games-result-box .result-box.incorrect { background-color: #fee2e2; color: #991b1b; }
+.games-result-box .user-answer-box, .games-result-box .correct-answer-box {
+    background-color: rgba(255, 255, 255, 0.1); border-color: #555; color: #fff;
+}
+
+/* --- NOWE STYLE DLA PODSUMOWANIA EGZAMINU --- */
+.exam-summary-score {
+    font-size: 1.5rem;
+    text-align: center;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    background-color: var(--gray-light);
+    font-weight: 500;
+}
+.games-task-box .exam-summary-score {
+    background-color: rgba(0,0,0,0.3);
+    color: #fff;
+}
+
+.task-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+.task-review-item {
+    border: 1px solid var(--gray-mid);
+    padding: 20px;
+    border-radius: 12px;
+}
+.games-task-box .task-review-item {
+    border-color: rgba(255,255,255,0.2);
+}
+.task-review-item p {
+    margin-top: 0;
+    font-size: 1.1rem;
+    border-bottom: 1px solid var(--gray-mid);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+.games-task-box .task-review-item p {
+    border-color: rgba(255,255,255,0.2);
+}
+.answers-review {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    text-align: left;
+}
+.answers-review h3 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 1rem;
+}
+
+#back-to-exams {
+    display: block;
+    margin: 30px auto 0 auto;
+    width: 100%;
+    max-width: 300px;
+    padding: 12px;
+}
+
+@media (max-width: 768px) {
+    .answers-review {
+        grid-template-columns: 1fr;
     }
 }
