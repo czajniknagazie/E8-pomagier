@@ -569,7 +569,86 @@ footer {
     max-width: 300px;
     padding: 12px;
 }
+/* --- NOWE STYLE DLA ROZWIJANYCH PANELI W TRYBIE GIER NA MOBILE --- */
 
+.collapse-toggle-btn {
+    display: none; /* Domyślnie ukryte na komputerach */
+    width: 100%;
+    padding: 12px 20px;
+    margin-bottom: 5px;
+    font-size: 1rem;
+    font-weight: bold;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--white);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    justify-content: space-between;
+    align-items: center;
+    transition: background-color 0.3s;
+}
+
+.collapse-toggle-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.collapse-toggle-btn span {
+    font-size: 1.2rem;
+    transition: transform 0.3s;
+}
+
+.games-player-stats-panel,
+.games-leaderboard-section {
+    padding: 0;
+}
+
+.collapsible-content {
+    padding: 20px;
+}
+
+
+@media (max-width: 1024px) {
+    .collapse-toggle-btn {
+        display: flex; /* Widoczne tylko na urządzeniach mobilnych */
+    }
+
+    .games-player-stats-panel,
+    .games-leaderboard-section {
+        background-color: transparent;
+        border: none;
+        backdrop-filter: none;
+        width: 100%;
+    }
+
+    .collapsible-content {
+        background-color: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(5px);
+        border-radius: 8px;
+        
+        /* Logika animacji zwijania/rozwijania */
+        max-height: 0;
+        overflow: hidden;
+        padding-top: 0;
+        padding-bottom: 0;
+        transition: max-height 0.4s ease-out, padding 0.4s ease-out;
+    }
+
+    .collapsible-content.expanded {
+        max-height: 1000px; /* Wystarczająco duża wartość, aby zmieścić zawartość */
+        padding-top: 20px;
+        padding-bottom: 20px;
+        transition: max-height 0.5s ease-in, padding 0.5s ease-in;
+    }
+
+    /* Ustawienie prawidłowej kolejności elementów w kolumnie */
+    #player-stats-toggle { order: -2; }
+    .games-player-stats-panel { order: -1; }
+    .games-main-section { order: 0; }
+    #leaderboard-toggle { order: 1; }
+    .games-leaderboard-section { order: 2; }
+}
 @media (max-width: 768px) {
     .answers-review {
         grid-template-columns: 1fr;

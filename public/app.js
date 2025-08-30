@@ -866,93 +866,123 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- TRYB GIER ---
     
-    async function renderGamesView() {
-        mainContent.querySelector('.games-content').innerHTML = `
-            <aside id="player-stats-panel" class="games-player-stats-panel">Ładowanie statystyk gracza...</aside>
-            <div class="games-main-section">
-                <div class="games-main-buttons">
-                    <button data-task-type="zamkniete">Zadania Zamknięte</button>
-                    <button data-task-type="otwarte">Zadania Otwarte</button>
-                    <button data-task-type="wszystkie">Tryb Mieszany</button>
-                    <button data-action="show-exams">Egzaminy</button>
-                    <button id="exit-games-mode-btn">Wyjdź z Trybu Gier</button>
-                </div>
+async function renderGamesView() {
+    mainContent.querySelector('.games-content').innerHTML = `
+        <button class="collapse-toggle-btn" id="player-stats-toggle" data-target="#player-stats-panel-content">
+            Pokaż statystyki gracza <span>▼</span>
+        </button>
+        <aside id="player-stats-panel" class="games-player-stats-panel">
+            <div id="player-stats-panel-content" class="collapsible-content">Ładowanie statystyk gracza...</div>
+        </aside>
+
+        <div class="games-main-section">
+            <div class="games-main-buttons">
+                <button data-task-type="zamkniete">Zadania Zamknięte</button>
+                <button data-task-type="otwarte">Zadania Otwarte</button>
+                <button data-task-type="wszystkie">Tryb Mieszany</button>
+                <button data-action="show-exams">Egzaminy</button>
+                <button id="exit-games-mode-btn">Wyjdź z Trybu Gier</button>
             </div>
-            <aside class="games-leaderboard-section">
+        </div>
+
+        <button class="collapse-toggle-btn" id="leaderboard-toggle" data-target="#leaderboard-section-content">
+            Pokaż tabelę liderów <span>▼</span>
+        </button>
+        <aside class="games-leaderboard-section">
+            <div id="leaderboard-section-content" class="collapsible-content">
                 <div id="leaderboard-container">
                     <h2>Najlepsi Gracze</h2>
                     <div id="leaderboard-table-container"><p>Ładowanie...</p></div>
                 </div>
                 <div id="stats-view-container" class="hidden">
-                     <h2>Statystyki Liderów</h2>
-                     <div id="stats-table-container"><p>Ładowanie...</p></div>
+                    <h2>Statystyki Liderów</h2>
+                    <div id="stats-table-container"><p>Ładowanie...</p></div>
                 </div>
                 <button id="toggle-stats-btn" class="games-stats-btn">Statystyki Liderów</button>
-            </aside>`;
-        
-        document.querySelector('.games-main-buttons').addEventListener('click', (e) => {
-            const button = e.target.closest('button');
-            if (!button) return;
-            if (button.dataset.taskType) renderGamesTaskView(button.dataset.taskType);
-            else if (button.dataset.action === 'show-exams') navigateTo('games-exams');
-            else if (button.id === 'exit-games-mode-btn') navigateTo('wszystkie');
-        });
+            </div>
+        </aside>`;
+    
+    // Logika przycisków głównych
+    document.querySelector('.games-main-buttons').addEventListener('click', (e) => {
+        const button = e.target.closest('button');
+        if (!button) return;
+        if (button.dataset.taskType) renderGamesTaskView(button.dataset.taskType);
+        else if (button.dataset.action === 'show-exams') navigateTo('games-exams');
+        else if (button.id === 'exit-games-mode-btn') navigateTo('wszystkie');
+    });
 
-        // Ładowanie statystyk gracza (lewa strona)
-        const playerStats = await api.request('/games/player-card-stats');
-        const playerStatsContainer = document.getElementById('player-stats-panel');
-        if (playerStats) {
-            const effectivenessHtml = playerStats.effectiveness.map(eff => `
-                <div class="stat-item"><span>Skuteczność (${eff.type})</span><span class="value">${eff.percentage}%</span></div>
-            `).join('');
-            playerStatsContainer.innerHTML = `
-                <h2>Statystyki Gracza</h2>
-                <h3>${playerStats.name}</h3>
-                <div class="stat-item"><span>Punkty Ogółem</span><span class="value">${playerStats.totalPoints}</span></div>
-                <div class="stat-item"><span>Punkty (zamknięte)</span><span class="value">${playerStats.closedPoints}</span></div>
-                <div class="stat-item"><span>Punkty (otwarte)</span><span class="value">${playerStats.openPoints}</span></div>
-                <div class="stat-item"><span>Rozw. zamknięte</span><span class="value">${playerStats.solvedClosedTotal}</span></div>
-                <div class="stat-item"><span>Rozw. otwarte</span><span class="value">${playerStats.solvedOpenTotal}</span></div>
-                <div class="stat-item"><span>Średnia z Egzaminów</span><span class="value">${playerStats.avgExamPercent}%</span></div>
-                ${effectivenessHtml}
-            `;
-        } else {
-            playerStatsContainer.innerHTML = '<h2>Statystyki</h2><p>Błąd ładowania statystyk.</p>';
+    // NOWA LOGIKA: Obsługa rozwijania/zwijania paneli
+    mainContent.querySelector('.games-content').addEventListener('click', (e) => {
+        const toggleBtn = e.target.closest('.collapse-toggle-btn');
+        if (!toggleBtn) return;
+
+        const targetId = toggleBtn.dataset.target;
+        const targetPanel = document.querySelector(targetId);
+
+        if (targetPanel) {
+            const isExpanded = targetPanel.classList.toggle('expanded');
+            const buttonText = toggleBtn.id === 'player-stats-toggle' ? 'statystyki gracza' : 'tabelę liderów';
+            const arrow = isExpanded ? '▲' : '▼';
+            const action = isExpanded ? 'Ukryj' : 'Pokaż';
+            toggleBtn.innerHTML = `${action} ${buttonText} <span>${arrow}</span>`;
         }
+    });
 
-        // Logika liderów (prawa strona)
-        const renderLeaderboard = (data, type) => {
-            if (!data || data.length === 0) return '<p>Brak danych.</p>';
-            let tableHtml = '<table><thead><tr><th>#</th><th>Gracz</th>';
-            if (type === 'exams') {
-                tableHtml += '<th>Wynik %</th></tr></thead><tbody>' + data.map((row, i) => `<tr><td>${i+1}</td><td>${row.user}</td><td>${(row.avg_percent || 0).toFixed(0)}%</td></tr>`).join('');
-            } else {
-                tableHtml += '<th>Punkty</th></tr></thead><tbody>' + data.map((row, i) => `<tr><td>${i+1}</td><td>${row.user}</td><td>${row.total_points}</td></tr>`).join('');
-            }
-            return tableHtml + '</tbody></table>';
-        };
-
-        document.getElementById('leaderboard-table-container').innerHTML = renderLeaderboard(await api.request('/games/leaderboard?type=all'), 'all');
-        
-        const toggleBtn = document.getElementById('toggle-stats-btn');
-        toggleBtn.addEventListener('click', async () => {
-            const isStatsView = !document.getElementById('leaderboard-container').classList.toggle('hidden');
-            document.getElementById('stats-view-container').classList.toggle('hidden', !isStatsView);
-            
-            if (isStatsView) {
-                toggleBtn.textContent = 'Powrót do Rankingu';
-                const [closed, open, exams] = await Promise.all([
-                    api.request('/games/leaderboard?type=closed'), api.request('/games/leaderboard?type=open'), api.request('/games/leaderboard?type=exams')
-                ]);
-                document.getElementById('stats-table-container').innerHTML = `
-                    <h3>Tylko Zamknięte</h3>${renderLeaderboard(closed, 'closed')}
-                    <h3>Tylko Otwarte</h3>${renderLeaderboard(open, 'open')}
-                    <h3>Procent z Egzaminów</h3>${renderLeaderboard(exams, 'exams')}`;
-            } else {
-                toggleBtn.textContent = 'Statystyki Liderów';
-            }
-        });
+    // Ładowanie statystyk gracza (lewa strona) - celujemy w nowy kontener
+    const playerStatsContainer = document.getElementById('player-stats-panel-content');
+    const playerStats = await api.request('/games/player-card-stats');
+    if (playerStats) {
+        const effectivenessHtml = playerStats.effectiveness.map(eff => `
+            <div class="stat-item"><span>Skuteczność (${eff.type})</span><span class="value">${eff.percentage}%</span></div>
+        `).join('');
+        playerStatsContainer.innerHTML = `
+            <h2>Statystyki Gracza</h2>
+            <h3>${playerStats.name}</h3>
+            <div class="stat-item"><span>Punkty Ogółem</span><span class="value">${playerStats.totalPoints}</span></div>
+            <div class="stat-item"><span>Punkty (zamknięte)</span><span class="value">${playerStats.closedPoints}</span></div>
+            <div class="stat-item"><span>Punkty (otwarte)</span><span class="value">${playerStats.openPoints}</span></div>
+            <div class="stat-item"><span>Rozw. zamknięte</span><span class="value">${playerStats.solvedClosedTotal}</span></div>
+            <div class="stat-item"><span>Rozw. otwarte</span><span class="value">${playerStats.solvedOpenTotal}</span></div>
+            <div class="stat-item"><span>Średnia z Egzaminów</span><span class="value">${playerStats.avgExamPercent}%</span></div>
+            ${effectivenessHtml}
+        `;
+    } else {
+        playerStatsContainer.innerHTML = '<h2>Statystyki</h2><p>Błąd ładowania statystyk.</p>';
     }
+
+    // Logika liderów (prawa strona)
+    const renderLeaderboard = (data, type) => {
+        if (!data || data.length === 0) return '<p>Brak danych.</p>';
+        let tableHtml = '<table><thead><tr><th>#</th><th>Gracz</th>';
+        if (type === 'exams') {
+            tableHtml += '<th>Wynik %</th></tr></thead><tbody>' + data.map((row, i) => `<tr><td>${i+1}</td><td>${row.user}</td><td>${(row.avg_percent || 0).toFixed(0)}%</td></tr>`).join('');
+        } else {
+            tableHtml += '<th>Punkty</th></tr></thead><tbody>' + data.map((row, i) => `<tr><td>${i+1}</td><td>${row.user}</td><td>${row.total_points}</td></tr>`).join('');
+        }
+        return tableHtml + '</tbody></table>';
+    };
+
+    document.getElementById('leaderboard-table-container').innerHTML = renderLeaderboard(await api.request('/games/leaderboard?type=all'), 'all');
+    
+    const toggleBtn = document.getElementById('toggle-stats-btn');
+    toggleBtn.addEventListener('click', async () => {
+        const isStatsView = !document.getElementById('leaderboard-container').classList.toggle('hidden');
+        document.getElementById('stats-view-container').classList.toggle('hidden', !isStatsView);
+        
+        if (isStatsView) {
+            toggleBtn.textContent = 'Powrót do Rankingu';
+            const [closed, open, exams] = await Promise.all([
+                api.request('/games/leaderboard?type=closed'), api.request('/games/leaderboard?type=open'), api.request('/games/leaderboard?type=exams')
+            ]);
+            document.getElementById('stats-table-container').innerHTML = `
+                <h3>Tylko Zamknięte</h3>${renderLeaderboard(closed, 'closed')}
+                <h3>Tylko Otwarte</h3>${renderLeaderboard(open, 'open')}
+                <h3>Procent z Egzaminów</h3>${renderLeaderboard(exams, 'exams')}`;
+        } else {
+            toggleBtn.textContent = 'Statystyki Liderów';
+        }
+    });
+}
 
 
     async function renderGamesExamsList() {
