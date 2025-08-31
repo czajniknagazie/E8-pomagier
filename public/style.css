@@ -25,10 +25,9 @@ body {
     overflow: hidden;
 }
 
-/* NOWE style dla trybu pełnoekranowego */
+/* Style dla trybu pełnoekranowego */
 body.games-mode-active nav,
-body.games-mode-active footer,
-body.games-mode-active .menu-toggle-btn {
+body.games-mode-active footer {
     display: none;
 }
 
@@ -38,8 +37,6 @@ body.games-mode-active main {
     width: 100%;
     overflow: hidden;
 }
-/* ==================================== */
-
 
 @keyframes gradient {
     0% { background-position: 0% 50%; }
@@ -304,7 +301,7 @@ main {
 #mass-upload-wizard h3 { border-bottom: 1px solid var(--gray-mid); padding-bottom: 10px; margin-bottom: 20px; }
 .task-preview-item {
     display: flex;
-    flex-wrap: wrap; /* Pozwala na zawijanie na mniejszych ekranach */
+    flex-wrap: wrap;
     gap: 20px;
     align-items: flex-start;
     padding: 15px;
@@ -313,14 +310,14 @@ main {
     margin-bottom: 15px;
 }
 .task-preview-image {
-    width: 350px; /* ZMIANA: Powiększony obrazek podglądu */
+    width: 350px;
     height: auto;
     border-radius: 4px;
     border: 1px solid var(--gray-light);
 }
 .task-preview-form {
     flex: 1;
-    min-width: 300px; /* Minimalna szerokość dla formularza */
+    min-width: 300px;
 }
 .task-preview-form .form-group { margin-bottom: 10px; }
 #mass-upload-wizard .action-buttons { margin-top: 20px; justify-content: flex-start; }
@@ -345,7 +342,7 @@ body.nav-open .menu-toggle-btn .menu-icon { background: rgba(255, 255, 255, 0); 
 body.nav-open .menu-toggle-btn .menu-icon::before { margin-top: 0; transform: rotate(405deg); }
 body.nav-open .menu-toggle-btn .menu-icon::after { margin-top: 0; transform: rotate(-405deg); }
 
-/* ZMIANA: Style dla zwijanej stopki */
+/* --- Footer --- */
 footer {
     position: fixed;
     bottom: 10px;
@@ -399,17 +396,19 @@ footer {
 }
 .games-content.games-task-view-mode { justify-content: center; align-items: center; }
 
-/* Panel statystyk gracza (lewa strona) */
-.games-player-stats-panel {
-    width: 350px; min-width: 300px; background-color: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
-    padding: 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
-    overflow-y: auto;
+.games-player-stats-panel,
+.games-leaderboard-section {
+    width: 350px;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
 }
-.games-player-stats-panel h2 { margin: 0 0 10px 0; text-align: center; color: var(--green); border-bottom: 1px solid var(--green); padding-bottom: 10px; }
-.games-player-stats-panel h3 { text-align: center; margin: 5px 0 15px; }
-.games-player-stats-panel .stat-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 0.9em; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.games-player-stats-panel .stat-item span:first-child { color: #aaa; }
-.games-player-stats-panel .stat-item .value { font-weight: bold; }
+
+.panel-inner-content h2 { margin: 0 0 10px 0; text-align: center; color: var(--green); border-bottom: 1px solid var(--green); padding-bottom: 10px; }
+.panel-inner-content h3 { text-align: center; margin: 5px 0 15px; }
+.panel-inner-content .stat-item { display: flex; justify-content: space-between; padding: 5px 0; font-size: 0.9em; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.panel-inner-content .stat-item span:first-child { color: #aaa; }
+.panel-inner-content .stat-item .value { font-weight: bold; }
 
 .games-main-section {
     flex-grow: 1; display: flex; flex-direction: column;
@@ -428,11 +427,6 @@ footer {
 #exit-games-mode-btn { border-color: var(--red); color: var(--red); margin-top: 20px; }
 #exit-games-mode-btn:hover { background: var(--red); color: var(--white); }
 
-.games-leaderboard-section {
-    width: 350px; min-width: 300px; background-color: rgba(0,0,0,0.3); backdrop-filter: blur(5px);
-    padding: 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); display: flex; flex-direction: column;
-}
-.games-leaderboard-section h2 { color: #fff; text-align: center; border-bottom: 1px solid var(--green); padding-bottom: 10px; margin-top: 0; }
 .games-leaderboard-section table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
 .games-leaderboard-section th, .games-leaderboard-section td { padding: 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .games-leaderboard-section th { font-weight: bold; color: var(--green); }
@@ -450,16 +444,8 @@ footer {
 }
 .games-exam-item:hover { background: rgba(0, 255, 0, 0.1); border-color: var(--green); }
 
-
-/* --- NOWE STYLE DLA ROZWIJANYCH PANELI W TRYBIE GIER NA MOBILE (v4) --- */
-
 .mobile-icon-toggle {
     display: none;
-}
-
-.games-player-stats-panel,
-.games-leaderboard-section {
-    padding: 0;
 }
 
 .panel-inner-content {
@@ -468,11 +454,15 @@ footer {
 
 
 @media (max-width: 1024px) {
-    .games-content { 
-        flex-direction: column; 
+    .games-content {
+        flex-direction: column;
         overflow-y: auto;
         position: relative;
         padding-top: 70px;
+    }
+
+    .games-content.panel-is-open .games-main-section {
+        display: none;
     }
 
     .mobile-icon-toggle {
@@ -489,7 +479,7 @@ footer {
         cursor: pointer;
         justify-content: center;
         align-items: center;
-        z-index: 10;
+        z-index: 30; /* Wyżej niż panele */
         padding: 0;
     }
 
@@ -505,42 +495,39 @@ footer {
     #leaderboard-toggle {
         right: 15px;
     }
-
+    
     .games-player-stats-panel,
     .games-leaderboard-section {
-        background-color: transparent;
-        border: none;
-        backdrop-filter: none;
         width: 100%;
         max-height: none;
+        order: 0;
+        background: none;
+        border: none;
     }
     
     .collapsible-content {
-        background-color: rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.2);
-        backdrop-filter: blur(5px);
-        border-radius: 8px;
-        transform: scaleX(0);
-        transition: transform 0.4s ease;
-    }
-
-    #player-stats-panel-content {
-        transform-origin: left;
-    }
-    #leaderboard-section-content {
-        transform-origin: right;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #000;
+        z-index: 20;
+        overflow-y: auto; /* Pozwala przewijać zawartość panelu */
+        transform: translateY(100%);
+        transition: transform 0.4s ease-in-out;
+        visibility: hidden;
     }
 
     .collapsible-content.expanded {
-        transform: scaleX(1);
+        transform: translateY(0);
+        visibility: visible;
     }
     
-    .games-main-section { padding: 40px 0; }
-
-    /* Kolejność paneli pod przyciskami */
-    .games-player-stats-panel { order: -1; }
-    .games-main-section { order: 0; }
-    .games-leaderboard-section { order: 1; }
+    .games-main-section { 
+        padding: 40px 0;
+        order: 0;
+    }
 }
 
 @media (max-width: 800px) {
@@ -602,7 +589,7 @@ footer {
     background-color: rgba(255, 255, 255, 0.1); border-color: #555; color: #fff;
 }
 
-/* --- NOWE STYLE DLA PODSUMOWANIA EGZAMINU --- */
+/* --- Style dla podsumowania egzaminu --- */
 .exam-summary-score {
     font-size: 1.5rem;
     text-align: center;

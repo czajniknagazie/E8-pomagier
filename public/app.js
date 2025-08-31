@@ -882,7 +882,7 @@ async function renderGamesView() {
                 <button data-task-type="zamkniete">Zadania Zamknięte</button>
                 <button data-task-type="otwarte">Zadania Otwarte</button>
                 <button data-task-type="wszystkie">Tryb Mieszany</button>
-                <button data-action="show-exams">Egzminy</button>
+                <button data-action="show-exams">Egzaminy</button>
                 <button id="exit-games-mode-btn">Wyjdź z Trybu Gier</button>
             </div>
         </div>
@@ -903,7 +903,7 @@ async function renderGamesView() {
             </div>
         </aside>`;
 
-    // Logika przycisków głównych
+    // Logika przycisków głównych (bez zmian)
     document.querySelector('.games-main-buttons').addEventListener('click', (e) => {
         const button = e.target.closest('button');
         if (!button) return;
@@ -912,22 +912,35 @@ async function renderGamesView() {
         else if (button.id === 'exit-games-mode-btn') navigateTo('wszystkie');
     });
 
-    // Logika rozwijania paneli za pomocą przycisków-ikon
-    mainContent.querySelector('.games-content').addEventListener('click', (e) => {
-        const toggleBtn = e.target.closest('.mobile-icon-toggle');
-        if (!toggleBtn) return;
+    // NOWA, ULEPSZONA LOGIKA DLA PEŁNOEKRANOWYCH PANELI
+    const gamesContent = mainContent.querySelector('.games-content');
+    const toggles = gamesContent.querySelectorAll('.mobile-icon-toggle');
+    const panels = gamesContent.querySelectorAll('.collapsible-content');
 
-        const targetId = toggleBtn.dataset.target;
-        const targetPanel = document.querySelector(targetId);
-        const arrow = toggleBtn.querySelector('span');
+    toggles.forEach(toggle => {
+        toggle.addEventListener('click', () => {
+            const targetId = toggle.dataset.target;
+            const targetPanel = gamesContent.querySelector(targetId);
 
-        if (targetPanel) {
-            const isExpanded = targetPanel.classList.toggle('expanded');
-            arrow.textContent = isExpanded ? '▲' : '▼';
-        }
+            // Jeśli kliknięty panel jest już otwarty, zamknij go
+            if (targetPanel.classList.contains('expanded')) {
+                targetPanel.classList.remove('expanded');
+                gamesContent.classList.remove('panel-is-open');
+                toggle.querySelector('span').textContent = '▼';
+            } else {
+                // Jeśli otwierasz nowy panel, najpierw zamknij wszystkie inne
+                panels.forEach(p => p.classList.remove('expanded'));
+                toggles.forEach(t => t.querySelector('span').textContent = '▼');
+
+                // Teraz otwórz docelowy panel
+                targetPanel.classList.add('expanded');
+                gamesContent.classList.add('panel-is-open');
+                toggle.querySelector('span').textContent = '▲';
+            }
+        });
     });
 
-    // Ładowanie statystyk gracza - celujemy w nowy, wewnętrzny kontener
+    // Ładowanie statystyk gracza (bez zmian, ale celuje w nową strukturę)
     const playerStatsContainer = mainContent.querySelector('#player-stats-panel-content .panel-inner-content');
     const playerStats = await api.request('/games/player-card-stats');
     if (playerStats) {
@@ -949,7 +962,7 @@ async function renderGamesView() {
         playerStatsContainer.innerHTML = '<h2>Statystyki</h2><p>Błąd ładowania statystyk.</p>';
     }
 
-    // Logika liderów
+    // Logika liderów (bez zmian, ale celuje w nową strukturę)
     const renderLeaderboard = (data, type) => {
         if (!data || data.length === 0) return '<p>Brak danych.</p>';
         let tableHtml = '<table><thead><tr><th>#</th><th>Gracz</th>';
