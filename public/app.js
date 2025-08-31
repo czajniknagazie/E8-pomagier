@@ -868,10 +868,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
 async function renderGamesView() {
     mainContent.querySelector('.games-content').innerHTML = `
-        <div class="games-mobile-toggles">
-            <button class="mobile-toggle" data-target="#player-stats-panel-content">Statystyki <span>▼</span></button>
-            <button class="mobile-toggle" data-target="#leaderboard-section-content">Liderzy <span>▼</span></button>
-        </div>
+        <button id="stats-toggle" class="mobile-icon-toggle" data-target="#player-stats-panel-content">📊<span>▼</span></button>
+        <button id="leaderboard-toggle" class="mobile-icon-toggle" data-target="#leaderboard-section-content">🏆<span>▼</span></button>
 
         <aside id="player-stats-panel" class="games-player-stats-panel">
             <div id="player-stats-panel-content" class="collapsible-content">Ładowanie statystyk gracza...</div>
@@ -910,9 +908,9 @@ async function renderGamesView() {
         else if (button.id === 'exit-games-mode-btn') navigateTo('wszystkie');
     });
 
-    // NOWA LOGIKA: Obsługa rozwijania/zwijania paneli za pomocą mniejszych przycisków
+    // Logika rozwijania paneli za pomocą przycisków-ikon
     mainContent.querySelector('.games-content').addEventListener('click', (e) => {
-        const toggleBtn = e.target.closest('.mobile-toggle');
+        const toggleBtn = e.target.closest('.mobile-icon-toggle');
         if (!toggleBtn) return;
 
         const targetId = toggleBtn.dataset.target;
@@ -925,7 +923,7 @@ async function renderGamesView() {
         }
     });
 
-    // Ładowanie statystyk gracza (lewa strona)
+    // Ładowanie statystyk gracza
     const playerStatsContainer = document.getElementById('player-stats-panel-content');
     const playerStats = await api.request('/games/player-card-stats');
     if (playerStats) {
@@ -947,7 +945,7 @@ async function renderGamesView() {
         playerStatsContainer.innerHTML = '<h2>Statystyki</h2><p>Błąd ładowania statystyk.</p>';
     }
 
-    // Logika liderów (prawa strona)
+    // Logika liderów
     const renderLeaderboard = (data, type) => {
         if (!data || data.length === 0) return '<p>Brak danych.</p>';
         let tableHtml = '<table><thead><tr><th>#</th><th>Gracz</th>';

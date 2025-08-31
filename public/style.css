@@ -26,10 +26,8 @@ body {
 }
 
 /* NOWE style dla trybu pełnoekranowego */
-/* UZUPEŁNIJ, ABY WYGLĄDAŁ TAK */
 body.games-mode-active nav,
-body.games-mode-active footer,
-body.games-mode-active .menu-toggle-btn {
+body.games-mode-active footer {
     display: none;
 }
 body.games-mode-active main {
@@ -571,33 +569,10 @@ footer {
     max-width: 300px;
     padding: 12px;
 }
-/* --- NOWE STYLE DLA ROZWIJANYCH PANELI W TRYBIE GIER NA MOBILE --- */
+/* --- NOWE STYLE DLA ROZWIJANYCH PANELI W TRYBIE GIER NA MOBILE (v3) --- */
 
-.collapse-toggle-btn {
-    display: none; /* Domyślnie ukryte na komputerach */
-    width: 100%;
-    padding: 12px 20px;
-    margin-bottom: 5px;
-    font-size: 1rem;
-    font-weight: bold;
-    background-color: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.2);
-    color: var(--white);
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: left;
-    justify-content: space-between;
-    align-items: center;
-    transition: background-color 0.3s;
-}
-
-.collapse-toggle-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.collapse-toggle-btn span {
-    font-size: 1.2rem;
-    transition: transform 0.3s;
+.mobile-icon-toggle {
+    display: none; /* Ukryte na komputerach */
 }
 
 .games-player-stats-panel,
@@ -609,12 +584,43 @@ footer {
     padding: 20px;
 }
 
-
 @media (max-width: 1024px) {
-    .collapse-toggle-btn {
-        display: flex; /* Widoczne tylko na urządzeniach mobilnych */
+    .games-content {
+        position: relative;
+        padding-top: 70px; /* Robi miejsce na przyciski u góry */
     }
 
+    .mobile-icon-toggle {
+        display: flex;
+        position: absolute;
+        top: 15px;
+        width: 50px;
+        height: 50px;
+        font-size: 1.5rem;
+        background-color: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: var(--white);
+        border-radius: 8px;
+        cursor: pointer;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+        padding: 0;
+    }
+
+    .mobile-icon-toggle span {
+        font-size: 0.8rem;
+        margin-left: -3px; /* Drobna korekta wizualna strzałki */
+    }
+
+    #stats-toggle {
+        left: 15px;
+    }
+
+    #leaderboard-toggle {
+        right: 15px;
+    }
+    
     .games-player-stats-panel,
     .games-leaderboard-section {
         background-color: transparent;
@@ -622,14 +628,12 @@ footer {
         backdrop-filter: none;
         width: 100%;
     }
-
+    
     .collapsible-content {
         background-color: rgba(0,0,0,0.3);
         border: 1px solid rgba(255,255,255,0.2);
         backdrop-filter: blur(5px);
         border-radius: 8px;
-        
-        /* Logika animacji zwijania/rozwijania */
         max-height: 0;
         overflow: hidden;
         padding-top: 0;
@@ -638,21 +642,14 @@ footer {
     }
 
     .collapsible-content.expanded {
-        max-height: 1000px; /* Wystarczająco duża wartość, aby zmieścić zawartość */
+        max-height: 1000px; 
         padding-top: 20px;
         padding-bottom: 20px;
         transition: max-height 0.5s ease-in, padding 0.5s ease-in;
     }
 
-    /* Ustawienie prawidłowej kolejności elementów w kolumnie */
-    #player-stats-toggle { order: -2; }
+    /* Kolejność paneli pod przyciskami */
     .games-player-stats-panel { order: -1; }
     .games-main-section { order: 0; }
-    #leaderboard-toggle { order: 1; }
-    .games-leaderboard-section { order: 2; }
-}
-@media (max-width: 768px) {
-    .answers-review {
-        grid-template-columns: 1fr;
-    }
+    .games-leaderboard-section { order: 1; }
 }
