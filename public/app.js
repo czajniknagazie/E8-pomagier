@@ -872,7 +872,9 @@ async function renderGamesView() {
         <button id="leaderboard-toggle" class="mobile-icon-toggle" data-target="#leaderboard-section-content">🏆<span>▼</span></button>
 
         <aside id="player-stats-panel" class="games-player-stats-panel">
-            <div id="player-stats-panel-content" class="collapsible-content">Ładowanie statystyk gracza...</div>
+            <div id="player-stats-panel-content" class="collapsible-content">
+                <div class="panel-inner-content">Ładowanie statystyk gracza...</div>
+            </div>
         </aside>
 
         <div class="games-main-section">
@@ -880,22 +882,24 @@ async function renderGamesView() {
                 <button data-task-type="zamkniete">Zadania Zamknięte</button>
                 <button data-task-type="otwarte">Zadania Otwarte</button>
                 <button data-task-type="wszystkie">Tryb Mieszany</button>
-                <button data-action="show-exams">Egzaminy</button>
+                <button data-action="show-exams">Egzminy</button>
                 <button id="exit-games-mode-btn">Wyjdź z Trybu Gier</button>
             </div>
         </div>
 
         <aside class="games-leaderboard-section">
             <div id="leaderboard-section-content" class="collapsible-content">
-                <div id="leaderboard-container">
-                    <h2>Najlepsi Gracze</h2>
-                    <div id="leaderboard-table-container"><p>Ładowanie...</p></div>
+                <div class="panel-inner-content">
+                    <div id="leaderboard-container">
+                        <h2>Najlepsi Gracze</h2>
+                        <div id="leaderboard-table-container"><p>Ładowanie...</p></div>
+                    </div>
+                    <div id="stats-view-container" class="hidden">
+                        <h2>Statystyki Liderów</h2>
+                        <div id="stats-table-container"><p>Ładowanie...</p></div>
+                    </div>
+                    <button id="toggle-stats-btn" class="games-stats-btn">Statystyki Liderów</button>
                 </div>
-                <div id="stats-view-container" class="hidden">
-                    <h2>Statystyki Liderów</h2>
-                    <div id="stats-table-container"><p>Ładowanie...</p></div>
-                </div>
-                <button id="toggle-stats-btn" class="games-stats-btn">Statystyki Liderów</button>
             </div>
         </aside>`;
 
@@ -923,8 +927,8 @@ async function renderGamesView() {
         }
     });
 
-    // Ładowanie statystyk gracza
-    const playerStatsContainer = document.getElementById('player-stats-panel-content');
+    // Ładowanie statystyk gracza - celujemy w nowy, wewnętrzny kontener
+    const playerStatsContainer = mainContent.querySelector('#player-stats-panel-content .panel-inner-content');
     const playerStats = await api.request('/games/player-card-stats');
     if (playerStats) {
         const effectivenessHtml = playerStats.effectiveness.map(eff => `
@@ -957,19 +961,19 @@ async function renderGamesView() {
         return tableHtml + '</tbody></table>';
     };
 
-    document.getElementById('leaderboard-table-container').innerHTML = renderLeaderboard(await api.request('/games/leaderboard?type=all'), 'all');
+    mainContent.querySelector('#leaderboard-table-container').innerHTML = renderLeaderboard(await api.request('/games/leaderboard?type=all'), 'all');
     
-    const toggleBtn = document.getElementById('toggle-stats-btn');
+    const toggleBtn = mainContent.querySelector('#toggle-stats-btn');
     toggleBtn.addEventListener('click', async () => {
-        const isStatsView = !document.getElementById('leaderboard-container').classList.toggle('hidden');
-        document.getElementById('stats-view-container').classList.toggle('hidden', !isStatsView);
+        const isStatsView = !mainContent.querySelector('#leaderboard-container').classList.toggle('hidden');
+        mainContent.querySelector('#stats-view-container').classList.toggle('hidden', !isStatsView);
         
         if (isStatsView) {
             toggleBtn.textContent = 'Powrót do Rankingu';
             const [closed, open, exams] = await Promise.all([
                 api.request('/games/leaderboard?type=closed'), api.request('/games/leaderboard?type=open'), api.request('/games/leaderboard?type=exams')
             ]);
-            document.getElementById('stats-table-container').innerHTML = `
+            mainContent.querySelector('#stats-table-container').innerHTML = `
                 <h3>Tylko Zamknięte</h3>${renderLeaderboard(closed, 'closed')}
                 <h3>Tylko Otwarte</h3>${renderLeaderboard(open, 'open')}
                 <h3>Procent z Egzaminów</h3>${renderLeaderboard(exams, 'exams')}`;
