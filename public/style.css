@@ -26,8 +26,10 @@ body {
 }
 
 /* NOWE style dla trybu pełnoekranowego */
+/* UZUPEŁNIJ, ABY WYGLĄDAŁ TAK */
 body.games-mode-active nav,
-body.games-mode-active footer {
+body.games-mode-active footer,
+body.games-mode-active .menu-toggle-btn {
     display: none;
 }
 body.games-mode-active main {

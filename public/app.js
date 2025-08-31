@@ -868,9 +868,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
 async function renderGamesView() {
     mainContent.querySelector('.games-content').innerHTML = `
-        <button class="collapse-toggle-btn" id="player-stats-toggle" data-target="#player-stats-panel-content">
-            Pokaż statystyki gracza <span>▼</span>
-        </button>
+        <div class="games-mobile-toggles">
+            <button class="mobile-toggle" data-target="#player-stats-panel-content">Statystyki <span>▼</span></button>
+            <button class="mobile-toggle" data-target="#leaderboard-section-content">Liderzy <span>▼</span></button>
+        </div>
+
         <aside id="player-stats-panel" class="games-player-stats-panel">
             <div id="player-stats-panel-content" class="collapsible-content">Ładowanie statystyk gracza...</div>
         </aside>
@@ -885,9 +887,6 @@ async function renderGamesView() {
             </div>
         </div>
 
-        <button class="collapse-toggle-btn" id="leaderboard-toggle" data-target="#leaderboard-section-content">
-            Pokaż tabelę liderów <span>▼</span>
-        </button>
         <aside class="games-leaderboard-section">
             <div id="leaderboard-section-content" class="collapsible-content">
                 <div id="leaderboard-container">
@@ -901,7 +900,7 @@ async function renderGamesView() {
                 <button id="toggle-stats-btn" class="games-stats-btn">Statystyki Liderów</button>
             </div>
         </aside>`;
-    
+
     // Logika przycisków głównych
     document.querySelector('.games-main-buttons').addEventListener('click', (e) => {
         const button = e.target.closest('button');
@@ -911,24 +910,22 @@ async function renderGamesView() {
         else if (button.id === 'exit-games-mode-btn') navigateTo('wszystkie');
     });
 
-    // NOWA LOGIKA: Obsługa rozwijania/zwijania paneli
+    // NOWA LOGIKA: Obsługa rozwijania/zwijania paneli za pomocą mniejszych przycisków
     mainContent.querySelector('.games-content').addEventListener('click', (e) => {
-        const toggleBtn = e.target.closest('.collapse-toggle-btn');
+        const toggleBtn = e.target.closest('.mobile-toggle');
         if (!toggleBtn) return;
 
         const targetId = toggleBtn.dataset.target;
         const targetPanel = document.querySelector(targetId);
+        const arrow = toggleBtn.querySelector('span');
 
         if (targetPanel) {
             const isExpanded = targetPanel.classList.toggle('expanded');
-            const buttonText = toggleBtn.id === 'player-stats-toggle' ? 'statystyki gracza' : 'tabelę liderów';
-            const arrow = isExpanded ? '▲' : '▼';
-            const action = isExpanded ? 'Ukryj' : 'Pokaż';
-            toggleBtn.innerHTML = `${action} ${buttonText} <span>${arrow}</span>`;
+            arrow.textContent = isExpanded ? '▲' : '▼';
         }
     });
 
-    // Ładowanie statystyk gracza (lewa strona) - celujemy w nowy kontener
+    // Ładowanie statystyk gracza (lewa strona)
     const playerStatsContainer = document.getElementById('player-stats-panel-content');
     const playerStats = await api.request('/games/player-card-stats');
     if (playerStats) {
@@ -983,7 +980,6 @@ async function renderGamesView() {
         }
     });
 }
-
 
     async function renderGamesExamsList() {
         mainContent.querySelector('.games-content').innerHTML = `
