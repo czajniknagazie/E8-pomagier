@@ -96,24 +96,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- AUTH & UI TOGGLING ---
-    function setupLoginListeners() {
-        document.getElementById('student-login-form').addEventListener('submit', handleStudentLogin);
-        document.getElementById('admin-login-form').addEventListener('submit', handleAdminLogin);
-        document.getElementById('show-admin-login').addEventListener('click', () => toggleLoginView(true));
-        document.getElementById('show-student-login').addEventListener('click', () => toggleLoginView(false));
-    }
-    
-    function toggleLoginView(showAdmin) {
-        document.getElementById('student-login-view').classList.toggle('hidden', showAdmin);
-        document.getElementById('admin-login-view').classList.toggle('hidden', !showAdmin);
+
+    // NOWA FUNKCJA do przełączania widoków logowania
+    function toggleLoginView(viewName) {
+        document.getElementById('student-login-view').classList.add('hidden');
+        document.getElementById('student-register-view').classList.add('hidden');
+        document.getElementById('admin-login-view').classList.add('hidden');
+        
+        const viewToShow = document.getElementById(viewName);
+        if (viewToShow) {
+            viewToShow.classList.remove('hidden');
+        } else {
+            // Domyślnie pokaż logowanie studenta, jeśli coś pójdzie nie tak
+            document.getElementById('student-login-view').classList.remove('hidden');
+        }
     }
 
+    // ZMODYFIKOWANA FUNKCJA
+    function setupLoginListeners() {
+        document.getElementById('student-login-form').addEventListener('submit', handleStudentLogin);
+        document.getElementById('student-register-form').addEventListener('submit', handleStudentRegister); // NOWE
+        document.getElementById('admin-login-form').addEventListener('submit', handleAdminLogin);
+        
+        // Przełączniki
+        document.getElementById('show-admin-login').addEventListener('click', () => toggleLoginView('admin-login-view'));
+        document.getElementById('show-student-login').addEventListener('click', () => toggleLoginView('student-login-view'));
+        
+        // NOWE przełączniki
+        document.getElementById('show-register-view').addEventListener('click', () => toggleLoginView('student-register-view'));
+        document.getElementById('show-login-view-from-register').addEventListener('click', () => toggleLoginView('student-login-view'));
+        document.getElementById('show-admin-login-from-register').addEventListener('click', () => toggleLoginView('admin-login-view'));
+    }
+
+    // ZMODYFIKOWANA FUNKCJA
     async function handleStudentLogin(e) {
         e.preventDefault();
         const name = document.getElementById('student-name').value;
-        const data = await api.request('/login-student', 'POST', { name });
+        const password = document.getElementById('student-password').value; // NOWE
+        // ZMIENIONY request API
+        const data = await api.request('/login-student', 'POST', { name, password }); 
         if (data) {
             login(data);
+        }
+    }
+
+    // NOWA FUNKCJA
+    async function handleStudentRegister(e) {
+        e.preventDefault();
+        const name = document.getElementById('register-name').value;
+        const password = document.getElementById('register-password').value;
+        if (!name || !password) {
+            alert('Nazwa i hasło są wymagane.');
+            return;
+        }
+        
+        try {
+            // Używamy try...catch, aby obsłużyć błędy z api.request
+            const data = await api.request('/register-student', 'POST', { name, password });
+            if (data && data.success) {
+                alert('Rejestracja pomyślna! Teraz możesz się zalogować.');
+                toggleLoginView('student-login-view');
+                document.getElementById('student-name').value = name; // Wypełnij nazwę
+                document.getElementById('student-password').value = ''; // Wyczyść hasło
+            }
+        } catch (err) {
+            // Błąd (np. "użytkownik już istnieje") zostanie wyświetlony przez globalny handler w api.request
+            console.error("Błąd rejestracji:", err);
         }
     }
     
@@ -121,7 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const name = document.getElementById('admin-name').value;
         const code = document.getElementById('admin-code').value;
-        const data = await api.request('/admin/login', 'POST', { name, code });
+        // UWAGA: Logika logowania admina również powinna zostać zaktualizowana na serwerze,
+        // aby korzystać z bazy danych, tak jak w pliku backend_setup.js
+        const data = await api.request('/admin/login', 'POST', { name, code }); 
         if (data) {
             login(data);
         }

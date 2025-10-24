@@ -14,15 +14,26 @@
     <div id="login-container" class="login-container">
         <div class="login-form">
             <h2>Generator E8</h2>
+
             <div id="student-login-view">
                 <h3>Zaloguj się jako uczeń</h3>
                 <form id="student-login-form">
                     <input type="text" id="student-name" placeholder="Wpisz swoją nazwę" required>
-                    <button type="submit">Wejdź</button>
-                </form>
-                <p>Nie masz konta? Po prostu wpisz nazwę i zacznij!</p>
-                <button class="link-button" id="show-admin-login">Jesteś administratorem?</button>
+                    <input type="password" id="student-password" placeholder="Wpisz hasło" required> <button type="submit">Zaloguj</button> </form>
+                <p>Nie masz konta? <button class="link-button" id="show-register-view">Zarejestruj się</button></p> <button class="link-button" id="show-admin-login">Jesteś administratorem?</button>
             </div>
+
+            <div id="student-register-view" class="hidden">
+                <h3>Rejestracja ucznia</h3>
+                <form id="student-register-form">
+                    <input type="text" id="register-name" placeholder="Wpisz swoją nazwę" required>
+                    <input type="password" id="register-password" placeholder="Wpisz hasło" required>
+                    <button type="submit">Zarejestruj</button>
+                </form>
+                <p>Masz już konto? <button class="link-button" id="show-login-view-from-register">Zaloguj się</button></p>
+                <button class="link-button" id="show-admin-login-from-register">Jesteś administratorem?</button>
+            </div>
+
             <div id="admin-login-view" class="hidden">
                 <h3>Logowanie administratora</h3>
                 <form id="admin-login-form">
