@@ -19,7 +19,12 @@
                 <h3>Zaloguj się jako uczeń</h3>
                 <form id="student-login-form">
                     <input type="text" id="student-name" placeholder="Wpisz swoją nazwę" required>
-                    <input type="password" id="student-password" placeholder="Wpisz hasło" required> <button type="submit">Zaloguj</button> </form>
+                    <input type="password" id="student-password" placeholder="Wpisz hasło" required>
+                    <div class="form-options">
+                        <label><input type="checkbox" id="student-remember-me" checked> Zapamiętaj mnie</label>
+                    </div>
+                    <button type="submit">Zaloguj</button>
+                </form>
                 <p>Nie masz konta? <button class="link-button" id="show-register-view">Zarejestruj się</button></p> <button class="link-button" id="show-admin-login">Jesteś administratorem?</button>
             </div>
 
@@ -39,6 +44,9 @@
                 <form id="admin-login-form">
                     <input type="text" id="admin-name" placeholder="Nazwa administratora" required>
                     <input type="password" id="admin-code" placeholder="Kod dostępu" required>
+                    <div class="form-options">
+                        <label><input type="checkbox" id="admin-remember-me" checked> Zapamiętaj mnie</label>
+                    </div>
                     <button type="submit">Zaloguj</button>
                 </form>
                 <button class="link-button" id="show-student-login">Wróć do logowania ucznia</button>
@@ -72,6 +80,7 @@
             </div>
             <div class="nav-bottom">
                  <p id="zalogowany-jako"></p>
+                 <button id="logout-btn" class="link-button">Wyloguj</button>
                 <div id="admin-panel-nav" class="hidden">
                     <hr>
                     <h2>Panel Admina</h2>
@@ -87,7 +96,7 @@
     <footer>
     <button id="help-button">Pomoc</button>
     <div id="footer-content" class="hidden">
-        <p>Wszelkie usterki, niedopracowania, opinie, pytanie lub pomysły na nowe funkcje kierujcie na pomagierapp@gmail.com, z góry dziękuje i pozdrawiam.</p>
+        <p>Wszelkie usterki, niedopracowania, opinie, pytania lub pomysły na nowe funkcje kierujcie na pomagierapp@gmail.com, z góry dziękuje i pozdrawiam.</p>
         <button id="collapse-footer-btn">Zamknij</button>
     </div>
 </footer>

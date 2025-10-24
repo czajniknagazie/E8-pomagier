@@ -105,9 +105,8 @@ input, select, textarea {
 .login-form button { width: 100%; padding: 12px; font-weight: bold; }
 .login-form p { font-size: 0.9rem; color: var(--gray-dark); }
 .link-button {
-    background: none;
     border: none;
-    color: var(--btn-hover);
+    color: var(--white);
     cursor: pointer;
     text-decoration: underline;
     padding: 5px;

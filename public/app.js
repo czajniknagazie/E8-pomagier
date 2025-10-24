@@ -133,10 +133,11 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const name = document.getElementById('student-name').value;
         const password = document.getElementById('student-password').value; // NOWE
+        const rememberMe = document.getElementById('student-remember-me').checked; // NOWE
         // ZMIENIONY request API
         const data = await api.request('/login-student', 'POST', { name, password }); 
         if (data) {
-            login(data);
+            login(data, rememberMe); // ZMIANA
         }
     }
 
@@ -165,23 +166,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // ZMODYFIKOWANA FUNKCJA
     async function handleAdminLogin(e) {
         e.preventDefault();
         const name = document.getElementById('admin-name').value;
         const code = document.getElementById('admin-code').value;
+        const rememberMe = document.getElementById('admin-remember-me').checked; // NOWE
         // UWAGA: Logika logowania admina również powinna zostać zaktualizowana na serwerze,
         // aby korzystać z bazy danych, tak jak w pliku backend_setup.js
         const data = await api.request('/admin/login', 'POST', { name, code }); 
         if (data) {
-            login(data);
+            login(data, rememberMe); // ZMIANA
         }
     }
 
-    function login(data) {
+    // ZMODYFIKOWANA FUNKCJA
+    function login(data, rememberMe = true) {
         appState.token = data.token;
         appState.user = { name: data.name, role: data.role };
-        localStorage.setItem('e8-token', data.token);
-        localStorage.setItem('e8-user', JSON.stringify(appState.user));
+        
+        // ZMIANA: Warunkowe zapisywanie w localStorage
+        if (rememberMe) {
+            localStorage.setItem('e8-token', data.token);
+            localStorage.setItem('e8-user', JSON.stringify(appState.user));
+        } else {
+            localStorage.removeItem('e8-token');
+            localStorage.removeItem('e8-user');
+        }
+        
         showApp();
     }
     
@@ -199,10 +211,14 @@ document.addEventListener('DOMContentLoaded', () => {
         appContainer.classList.add('hidden');
     }
 
+    // ZMODYFIKOWANA FUNKCJA
     function showApp() {
         loginContainer.classList.add('hidden');
         appContainer.classList.remove('hidden');
         document.getElementById('zalogowany-jako').textContent = `Zalogowano jako: ${appState.user.name}`;
+        
+        // NOWE: Dodanie listenera dla wylogowania
+        document.getElementById('logout-btn').addEventListener('click', logout);
         
         const adminNav = document.getElementById('admin-panel-nav');
         if (appState.user.role === 'admin') {
