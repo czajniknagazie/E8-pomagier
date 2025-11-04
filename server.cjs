@@ -2,7 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
-const jwt = require("jsonwebtoken");
 
 // --- ZMIANA NA PG ---
 const { Pool } = require("pg"); // ZMIANA: Używamy 'pg' zamiast 'better-sqlite3'
