@@ -2,19 +2,35 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
-const { Pool } = require("pg");
+const jwt = require("jsonwebtoken");
+
+// --- ZMIANA NA PG ---
+const { Pool } = require("pg"); // ZMIANA: Używamy 'pg' zamiast 'better-sqlite3'
+
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const bcrypt = require("bcrypt"); // NOWOŚĆ: Do hashowania haseł
+const bcrypt = require("bcrypt");
+// ...
 
 dotenv.config();
 const app = express();
-const db = new Database(process.env.DB_PATH || "./data.sqlite");
+// --- USUNIĘTA STARA LINIA 13 ---
+// const db = new Database(process.env.DB_PATH || "./data.sqlite"); // USUNIJ TĘ LINIĘ!
 const PORT = process.env.PORT || 3000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads";
 const saltRounds = 10; // Siła hashowania
 
+// --- NOWA INICJALIZACJA DLA POSTGRESQL (Dodana w nowym miejscu) ---
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
+
+// Funkcja do obsługi zapytań
+const query = (text, params) => pool.query(text, params);
 // --- SEKCJA AKTUALIZACJI BAZY DANYCH (MIGRACJA) ---
 
 // Migracja tabeli 'solved' (bez zmian w tej wersji, zachowujemy punkty i tryby)
