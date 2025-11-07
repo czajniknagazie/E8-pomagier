@@ -2,27 +2,26 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
-const { Pool } = require("pg"); // UŻYWAMY 'pg'
+const { Pool } = require("pg");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcrypt");
 
-// Poprawka wczytywania .env
-dotenv.config(); 
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "./uploads"; 
 const saltRounds = 10;
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key'; 
-const ADMIN_CODE = process.env.ADMIN_CODE || 'admin123'; // Dodano zmienną, której używamy poniżej
+const ADMIN_CODE = process.env.ADMIN_CODE || 'admin123'; 
 
 // Konfiguracja połączenia z PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
-        rejectUnauthorized: false // Wymagane na darmowych planach
+        rejectUnauthorized: false
     }
 });
 
@@ -93,11 +92,10 @@ async function initializeDatabase() {
             );
         `);
 
-        // Sprawdzenie i utworzenie admina (Używamy ADMIN_CODE)
+        // Sprawdzenie i utworzenie admina
         const adminPassword = process.env.ADMIN_CODE || 'admin123';
         const adminHash = bcrypt.hashSync(adminPassword, saltRounds);
         
-        // Używamy ON CONFLICT (tylko PostgreSQL)
         await client.query(
             `INSERT INTO users (name, password_hash, role) VALUES ($1, $2, $3)
              ON CONFLICT (name) DO UPDATE SET password_hash = $2, role = $3`,
@@ -113,8 +111,6 @@ async function initializeDatabase() {
 }
 // --- KONIEC SEKCJI INICJALIZACJI ---
 
-// ... reszta kodu, która nie została zmieniona ... 
-// ...
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 app.use(express.json({ limit: "20mb" }));
@@ -225,7 +221,6 @@ app.get("/api/tasks", auth(), async (req, res) => {
     
     try {
         const result = await pool.query(queryText, params);
-        // 'opcje' są już JSONB, PostgreSQL zwraca je jako obiekty
         res.json(result.rows);
     } catch(e) {
         console.error("Błąd przy pobieraniu zadań:", e);
@@ -238,7 +233,6 @@ app.put("/api/tasks/:id", auth("admin"), async (req, res) => {
     const { odpowiedz, punkty, opcje } = req.body;
     if (odpowiedz === undefined || punkty === undefined) return res.status(400).json({ error: "Brak wszystkich wymaganych danych (odpowiedz, punkty)." });
     try {
-        // opcje przychodzą jako obiekt JSON z frontendu, PostgreSQL to przyjmuje
         const result = await pool.query(
             "UPDATE tasks SET odpowiedz = $1, punkty = $2, opcje = $3 WHERE id = $4",
             [odpowiedz, Number(punkty), opcje, id]
@@ -284,7 +278,6 @@ app.post("/api/solved", auth(), async (req, res) => {
   if (!taskId) return res.status(400).json({ error: "Brak taskId" });
   const points = earnedPoints !== undefined ? Number(earnedPoints) : (isCorrect ? 1 : 0);
   try {
-    // Składnia ON CONFLICT dla PostgreSQL
     await pool.query(
         `INSERT INTO solved ("user", task_id, is_correct, mode, earned_points) 
          VALUES ($1, $2, $3, $4, $5)
@@ -309,7 +302,7 @@ app.delete("/api/solved", auth(), async (req, res) => {
   }
 });
 
-// --- Image Upload (bez zmian) ---
+// --- Image Upload ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
@@ -325,36 +318,30 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   res.json({ success: true, files });
 });
 
-// --- Bulk Task Creation (Z POPRAWIONYM PARSOWANIEM) ---
+// --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   const { tasks } = req.body || {};
   if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN'); // Rozpocznij transakcję
+    await client.query('BEGIN');
     for (const t of tasks) {
-        
-        // KLUCZOWA POPRAWKA PARSOWANIA POLA OPCJE
         let opcjeObject = null;
         if (t.opcje) {
             try {
-                // Spróbuj sparsować, jeśli jest to ciąg znaków (jak w eksporcie SQLite)
                 opcjeObject = JSON.parse(t.opcje);
             } catch {
-                // Jeśli parsowanie się nie uda, użyj wartości bezpośrednio (jeśli już jest obiektem)
                 opcjeObject = t.opcje;
             }
         }
-        // KONIEC KLUCZOWEJ POPRAWKI
         
-        // Teraz wysyłamy opcjeObject, które jest już poprawnym obiektem/tablicą dla JSONB
         await client.query(
             `INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES ($1, $2, $3, $4, $5, $6)`,
             [t.type, t.tresc, t.odpowiedz, opcjeObject, Number(t.punkty) || 1, t.arkusz]
         );
     }
-    await client.query('COMMIT'); // Zakończ transakcję
+    await client.query('COMMIT');
     res.json({ success: true, count: tasks.length });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -367,7 +354,6 @@ app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
 app.delete("/api/tasks/:id", auth("admin"), async (req, res) => {
     const { id } = req.params;
     try {
-        // Usuń powiązane wpisy w 'solved' zanim usuniemy zadanie
         await pool.query("DELETE FROM solved WHERE task_id = $1", [id]);
         const result = await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
         
@@ -392,7 +378,6 @@ app.get("/api/exams/:id", auth(), async (req, res) => {
   const ids = JSON.parse(exam.tasks || "[]");
   if (!ids.length) return res.json({ id: exam.id, name: exam.name, tasks: [] });
   
-  // Składnia PostgreSQL dla listy ID (ANY)
   const tasksResult = await pool.query(`SELECT * FROM tasks WHERE id = ANY($1::int[])`, [ids]);
   
   const tasksMap = new Map(tasksResult.rows.map(t => [t.id, t]));
@@ -426,7 +411,6 @@ app.post("/api/exams", auth("admin"), async (req, res) => {
         [name, JSON.stringify(taskIds)]
     );
     
-    // Przypisz arkusz do zadań
     if (arkuszName) {
         await client.query(
             "UPDATE tasks SET arkusz = $1 WHERE id = ANY($2::int[])", 
@@ -456,7 +440,7 @@ app.delete("/api/exams/:id", auth("admin"), async (req, res) => {
     }
 });
 
-// --- Results i Stats (bez zmian) ---
+// --- Results i Stats ---
 app.post("/api/results", auth(), async (req, res) => {
     const { examId, examName, correct, wrong, total, percent } = req.body || {};
     try {
