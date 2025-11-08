@@ -318,7 +318,7 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   res.json({ success: true, files });
 });
 
-// --- Bulk Task Creation (Z POPRAWKĄ) ---
+// --- Bulk Task Creation (Z POPRAWKĄ NR 2) ---
 app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   const { tasks } = req.body || {};
   if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
@@ -327,11 +327,12 @@ app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   try {
     await client.query('BEGIN');
     for (const t of tasks) {
-        
-        // Używamy bezpośrednio t.opcje. Express sparsował już przychodzący JSON.
+        // ZMIANA TUTAJ: Jawna serializacja do JSON string, 
+        // aby upewnić się, że baza danych akceptuje format.
+        const opcjeJsonString = JSON.stringify(t.opcje); 
         await client.query(
             `INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [t.type, t.tresc, t.odpowiedz, t.opcje, Number(t.punkty) || 1, t.arkusz] 
+            [t.type, t.tresc, t.odpowiedz, opcjeJsonString, Number(t.punkty) || 1, t.arkusz] 
         );
     }
     await client.query('COMMIT');
@@ -342,19 +343,6 @@ app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   } finally {
     client.release();
   }
-});
-
-app.delete("/api/tasks/:id", auth("admin"), async (req, res) => {
-    const { id } = req.params;
-    try {
-        await pool.query("DELETE FROM solved WHERE task_id = $1", [id]);
-        const result = await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
-        
-        if (result.rowCount > 0) res.status(204).send();
-        else res.status(404).json({ error: "Zadanie nie znaleziono." });
-    } catch (e) {
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
 });
 
 // --- Exams ---
