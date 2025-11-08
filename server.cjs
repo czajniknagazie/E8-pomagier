@@ -244,32 +244,36 @@ app.put("/api/tasks/:id", auth("admin"), async (req, res) => {
     }
 });
 
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/tasks/random
 app.get("/api/tasks/random", auth(), async (req, res) => {
-    const { type, incorrect, mode = 'standard' } = req.query;
-    let queryText;
-    const params = [req.user.name, mode]; 
+    const { type, incorrect, mode = 'standard' } = req.query;
+    let queryText;
+    const params = [req.user.name, mode]; 
 
-    if (incorrect === 'true') {
-        queryText = `SELECT T.* FROM tasks T INNER JOIN solved S ON T.id = S.task_id WHERE S."user" = $1 AND S.mode = $2 AND S.is_correct = 0`;
-        if (type === 'zamkniete' || type === 'otwarte') {
-            queryText += ' AND T.type = $3';
-            params.push(type); 
-        }
-    } else {
-        queryText = `SELECT * FROM tasks WHERE id NOT IN (SELECT task_id FROM solved WHERE "user" = $1 AND mode = $2)`;
-        if (type === 'zamkniete' || type === 'otwarte') {
-            queryText += ' AND type = $3';
-            params.push(type); 
-        }
-    }
-    queryText += ' ORDER BY RANDOM() LIMIT 1';
+    if (incorrect === 'true') {
+        // ZAPYTANIE 1: POBIERANIE ZADAŃ ROZWIĄZANYCH BŁĘDNIE
+        queryText = `SELECT T.* FROM tasks T INNER JOIN solved S ON T.id = S.task_id WHERE S."user" = $1 AND S.mode = $2 AND S.is_correct = 0`;
+        if (type === 'zamkniete' || type === 'otwarte') {
+            queryText += ' AND T.type = $3';
+            params.push(type); 
+        }
+    } else {
+        // ZAPYTANIE 2: POBIERANIE ZADAŃ JESZCZE NIE ROZWIĄZANYCH
+        queryText = `SELECT * FROM tasks WHERE id NOT IN (SELECT task_id FROM solved WHERE "user" = $1 AND mode = $2)`;
+        if (type === 'zamkniete' || type === 'otwarte') {
+            queryText += ' AND type = $3';
+            params.push(type); 
+        }
+    }
+    queryText += ' ORDER BY RANDOM() LIMIT 1';
 
-    try {
-        const result = await pool.query(queryText, params);
-        res.json(result.rows[0] || null);
-    } catch(e) {
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+    try {
+        const result = await pool.query(queryText, params);
+        res.json(result.rows[0] || null);
+    } catch(e) {
+        console.error("BŁĄD W API /api/tasks/random:", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 // --- Solved Tasks ---
@@ -485,18 +489,16 @@ app.get("/api/stats", auth(), async (req, res) => {
     }
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats (Dla pewności)
 app.get("/api/games/player-card-stats", auth(), async (req, res) => {
     const user = req.user.name; 
     try {
-        // ZAPYTANIE 1: Statystyki punktowe z zadań w trybie 'games'
         const gameModeStatsRes = await pool.query(`
             SELECT t.type, SUM(s.earned_points) AS points, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, COUNT(*) AS total
             FROM solved s JOIN tasks t ON s.task_id = t.id
             WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
         `, [user]);
         
-        // ZAPYTANIE 2: Średnia z egzaminów
         const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`, [user]);
 
         const gameModeStats = gameModeStatsRes.rows;
