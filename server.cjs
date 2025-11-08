@@ -437,84 +437,91 @@ app.post("/api/results", auth(), async (req, res) => {
     }
 });
 
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/stats
 app.get("/api/stats", auth(), async (req, res) => {
-    const user = req.user.name; 
-    
-    const generalStatsRes = await pool.query(`
-        SELECT COUNT(s."user") as total_solved,
-               SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as total_correct,
-               SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as total_wrong
-        FROM solved s WHERE s."user" = $1 AND s.mode = 'standard'
-    `, [user]);
-    
-    const typeStatsRes = await pool.query(`
-        SELECT t.type,
-               SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as correct,
-               SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) as wrong
-        FROM solved s JOIN tasks t ON s.task_id = t.id
-        WHERE s."user" = $1 AND s.mode = 'standard' GROUP BY t.type
-    `, [user]);
-    
-    const examAggregatesRes = await pool.query(`
-        SELECT MAX(percent) as highestScore, AVG(percent) as averageScore
-        FROM results WHERE "user" = $1
-    `, [user]);
+    const user = req.user.name; 
+    
+    try {
+        // ZAPYTANIE 1: Generalne Statystyki Rozwiązanych Zadań
+        const generalStatsRes = await pool.query(`
+            SELECT COUNT(s."user") AS total_solved, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS total_correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS total_wrong
+            FROM solved s WHERE s."user" = $1 AND s.mode = 'standard'
+        `, [user]);
+        
+        // ZAPYTANIE 2: Statystyki Wg Typu Zadań
+        const typeStatsRes = await pool.query(`
+            SELECT t.type, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS wrong
+            FROM solved s JOIN tasks t ON s.task_id = t.id
+            WHERE s."user" = $1 AND s.mode = 'standard' GROUP BY t.type
+        `, [user]);
+        
+        // ZAPYTANIE 3: Agregaty Egzaminów
+        const examAggregatesRes = await pool.query(`
+            SELECT MAX(percent) AS highestScore, AVG(percent) AS averageScore
+            FROM results WHERE "user" = $1
+        `, [user]);
 
-    const solvedExamsRes = await pool.query(
-        'SELECT exam_name, correct, total, percent FROM results WHERE "user" = $1 ORDER BY id DESC', 
-        [user]
-    );
+        // ZAPYTANIE 4: Historia Egzaminów
+        const solvedExamsRes = await pool.query(
+            'SELECT exam_name, correct, total, percent FROM results WHERE "user" = $1 ORDER BY id DESC', 
+            [user]
+        );
 
-    const generalStats = generalStatsRes.rows[0] || {};
-    const examAggregates = examAggregatesRes.rows[0] || {};
+        const generalStats = generalStatsRes.rows[0] || {};
+        const examAggregates = examAggregatesRes.rows[0] || {};
 
-    generalStats.highestScore = examAggregates.highestscore || 0;
-    generalStats.averageScore = examAggregates.averageScore || 0;
-    
-    const formattedTypeStats = typeStatsRes.rows.reduce((acc, curr) => {
-        acc[curr.type] = { correct: Number(curr.correct) || 0, wrong: Number(curr.wrong) || 0 };
-        return acc;
-    }, {});
-    
-    res.json({ generalStats, typeStats: formattedTypeStats, solvedExams: solvedExamsRes.rows });
+        generalStats.highestScore = examAggregates.highestscore || 0;
+        generalStats.averageScore = examAggregates.averageScore || 0;
+        
+        const formattedTypeStats = typeStatsRes.rows.reduce((acc, curr) => {
+            acc[curr.type] = { correct: Number(curr.correct) || 0, wrong: Number(curr.wrong) || 0 };
+            return acc;
+        }, {});
+        
+        res.json({ generalStats, typeStats: formattedTypeStats, solvedExams: solvedExamsRes.rows });
+    } catch (e) {
+        console.error("BŁĄD W API /api/stats:", e);
+        res.status(500).json({ error: "Błąd API: " + e.message });
+    }
 });
 
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats
 app.get("/api/games/player-card-stats", auth(), async (req, res) => {
-    const user = req.user.name; 
-    try {
-        const gameModeStatsRes = await pool.query(`
-            SELECT t.type,
-                   SUM(s.earned_points) as points,
-                   SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) as correct,
-                   COUNT(*) as total
-            FROM solved s JOIN tasks t ON s.task_id = t.id
-            WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
-        `, [user]);
-        
-        const examDataRes = await pool.query(`SELECT AVG(percent) as avg_percent FROM results WHERE "user" = $1`, [user]);
+    const user = req.user.name; 
+    try {
+        // ZAPYTANIE 1: Statystyki punktowe z zadań w trybie 'games'
+        const gameModeStatsRes = await pool.query(`
+            SELECT t.type, SUM(s.earned_points) AS points, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, COUNT(*) AS total
+            FROM solved s JOIN tasks t ON s.task_id = t.id
+            WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
+        `, [user]);
+        
+        // ZAPYTANIE 2: Średnia z egzaminów
+        const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`, [user]);
 
-        const gameModeStats = gameModeStatsRes.rows;
-        const closedData = gameModeStats.find(r => r.type === 'zamkniete') || {};
-        const openData = gameModeStats.find(r => r.type === 'otwarte') || {};
-        const examData = examDataRes.rows[0];
+        const gameModeStats = gameModeStatsRes.rows;
+        const closedData = gameModeStats.find(r => r.type === 'zamkniete') || {};
+        const openData = gameModeStats.find(r => r.type === 'otwarte') || {};
+        const examData = examDataRes.rows[0];
 
-        res.json({
-            name: user,
-            totalPoints: (Number(closedData.points) || 0) + (Number(openData.points) || 0),
-            closedPoints: Number(closedData.points) || 0,
-            openPoints: Number(openData.points) || 0,
-            solvedClosedTotal: Number(closedData.total) || 0,
-            solvedOpenTotal: Number(openData.total) || 0,
-            avgExamPercent: (examData?.avg_percent || 0).toFixed(0),
-            effectiveness: gameModeStats.map(t => ({
-                type: t.type,
-                percentage: t.total > 0 ? ((t.correct / t.total) * 100).toFixed(0) : 0,
-                details: `${t.correct || 0}/${t.total || 0}`
-            }))
-        });
-    } catch (e) {
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+        res.json({
+            name: user,
+            totalPoints: (Number(closedData.points) || 0) + (Number(openData.points) || 0),
+            closedPoints: Number(closedData.points) || 0,
+            openPoints: Number(openData.points) || 0,
+            solvedClosedTotal: Number(closedData.total) || 0,
+            solvedOpenTotal: Number(openData.total) || 0,
+            avgExamPercent: (examData?.avg_percent || 0).toFixed(0),
+            effectiveness: gameModeStats.map(t => ({
+                type: t.type,
+                percentage: t.total > 0 ? ((t.correct / t.total) * 100).toFixed(0) : 0,
+                details: `${t.correct || 0}/${t.total || 0}`
+            }))
+        });
+    } catch (e) {
+        console.error("BŁĄD W API /api/games/player-card-stats:", e);
+        res.status(500).json({ error: "Błąd API: " + e.message });
+    }
 });
 
 app.get("/api/games/leaderboard", auth(), async (req, res) => {
