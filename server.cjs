@@ -27,87 +27,87 @@ const pool = new Pool({
 
 // Funkcja do inicjalizacji bazy danych (tworzenia tabel)
 async function initializeDatabase() {
-    console.log("Łączenie z bazą danych PostgreSQL...");
-    let client;
-    try {
-        client = await pool.connect();
-        console.log("Połączono z bazą PostgreSQL. Inicjalizacja tabel...");
+    console.log("Łączenie z bazą danych PostgreSQL...");
+    let client;
+    try {
+        client = await pool.connect();
+        console.log("Połączono z bazą PostgreSQL. Inicjalizacja tabel...");
 
-        // UŻYTKOWNICY
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'student'
-            );
-        `);
-        
-        // ZADANIA
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS tasks (
-                id SERIAL PRIMARY KEY,
-                type TEXT NOT NULL,
-                tresc TEXT NOT NULL,
-                odpowiedz TEXT,
-                opcje JSONB, 
-                punkty INTEGER DEFAULT 1,
-                arkusz TEXT
-            );
-        `);
-        
-        // EGZAMINY
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS exams (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                tasks TEXT NOT NULL 
-            );
-        `);
-        
-        // WYNIKI
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS results (
-                id SERIAL PRIMARY KEY,
-                "user" TEXT NOT NULL, 
-                exam_id INTEGER NOT NULL,
-                exam_name TEXT NOT NULL,
-                correct INTEGER NOT NULL,
-                wrong INTEGER NOT NULL,
-                total INTEGER NOT NULL,
-                percent REAL NOT NULL,
-                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        
-        // ROZWIĄZANE ZADANIA
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS solved (
-                "user" TEXT NOT NULL,
-                task_id INTEGER NOT NULL,
-                is_correct INTEGER NOT NULL,
-                mode TEXT NOT NULL DEFAULT 'standard',
-                earned_points INTEGER,
-                PRIMARY KEY ("user", task_id, mode)
-            );
-        `);
+        // UŻYTKOWNICY
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'student'
+            );
+        `);
 
-        // Sprawdzenie i utworzenie admina
-        const adminPassword = process.env.ADMIN_CODE || 'admin123';
-        const adminHash = bcrypt.hashSync(adminPassword, saltRounds);
-        
-        await client.query(
-            `INSERT INTO users (name, password_hash, role) VALUES ($1, $2, $3)
-             ON CONFLICT (name) DO UPDATE SET password_hash = $2, role = $3`,
-            ['admin', adminHash, 'admin']
-        );
-        
-        console.log("Tabele PostgreSQL zweryfikowane/utworzone.");
-        client.release();
-    } catch (err) {
-        console.error("Błąd inicjalizacji bazy danych PostgreSQL:", err);
-        throw err; 
-    }
+        // ZADANIA
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                type TEXT NOT NULL,
+                tresc TEXT NOT NULL,
+                odpowiedz TEXT,
+                opcje JSONB, 
+                punkty INTEGER DEFAULT 1,
+                arkusz TEXT
+            );
+        `);
+
+        // EGZAMINY
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS exams (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                tasks TEXT NOT NULL 
+            );
+        `);
+
+        // WYNIKI
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS results (
+                id SERIAL PRIMARY KEY,
+                "user" TEXT NOT NULL, 
+                exam_id INTEGER NOT NULL,
+                exam_name TEXT NOT NULL,
+                correct INTEGER NOT NULL,
+                wrong INTEGER NOT NULL,
+                total INTEGER NOT NULL,
+                percent REAL NOT NULL,
+                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // ROZWIĄZANE ZADANIA
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS solved (
+                "user" TEXT NOT NULL,
+                task_id INTEGER NOT NULL,
+                is_correct INTEGER NOT NULL,
+                mode TEXT NOT NULL DEFAULT 'standard',
+                earned_points INTEGER,
+                PRIMARY KEY ("user", task_id, mode)
+            );
+        `);
+
+        // Sprawdzenie i utworzenie admina
+        const adminPassword = process.env.ADMIN_CODE || 'admin123';
+        const adminHash = bcrypt.hashSync(adminPassword, saltRounds);
+        
+        await client.query(
+            `INSERT INTO users (name, password_hash, role) VALUES ($1, $2, $3)
+             ON CONFLICT (name) DO UPDATE SET password_hash = $2, role = $3`,
+            ['admin', adminHash, 'admin']
+        );
+        
+        console.log("Tabele PostgreSQL zweryfikowane/utworzone.");
+        client.release();
+    } catch (err) {
+        console.error("Błąd inicjalizacji bazy danych PostgreSQL:", err);
+        throw err; 
+    }
 }
 // --- KONIEC SEKCJI INICJALIZACJI ---
 
