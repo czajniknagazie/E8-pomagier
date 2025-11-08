@@ -27,87 +27,87 @@ const pool = new Pool({
 
 // Funkcja do inicjalizacji bazy danych (tworzenia tabel)
 async function initializeDatabase() {
-    console.log("Łączenie z bazą danych PostgreSQL...");
-    let client;
-    try {
-        client = await pool.connect();
-        console.log("Połączono z bazą PostgreSQL. Inicjalizacja tabel...");
+    console.log("Łączenie z bazą danych PostgreSQL...");
+    let client;
+    try {
+        client = await pool.connect();
+        console.log("Połączono z bazą PostgreSQL. Inicjalizacja tabel...");
 
-        // UŻYTKOWNICY
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'student'
-            );
-        `);
+        // UŻYTKOWNICY
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'student'
+            );
+        `);
 
-        // ZADANIA
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS tasks (
-                id SERIAL PRIMARY KEY,
-                type TEXT NOT NULL,
-                tresc TEXT NOT NULL,
-                odpowiedz TEXT,
-                opcje JSONB, 
-                punkty INTEGER DEFAULT 1,
-                arkusz TEXT
-            );
-        `);
+        // ZADANIA
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                type TEXT NOT NULL,
+                tresc TEXT NOT NULL,
+                odpowiedz TEXT,
+                opcje JSONB, 
+                punkty INTEGER DEFAULT 1,
+                arkusz TEXT
+            );
+        `);
 
-        // EGZAMINY
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS exams (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                tasks TEXT NOT NULL 
-            );
-        `);
+        // EGZAMINY
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS exams (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                tasks TEXT NOT NULL 
+            );
+        `);
 
-        // WYNIKI
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS results (
-                id SERIAL PRIMARY KEY,
-                "user" TEXT NOT NULL, 
-                exam_id INTEGER NOT NULL,
-                exam_name TEXT NOT NULL,
-                correct INTEGER NOT NULL,
-                wrong INTEGER NOT NULL,
-                total INTEGER NOT NULL,
-                percent REAL NOT NULL,
-                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+        // WYNIKI
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS results (
+                id SERIAL PRIMARY KEY,
+                "user" TEXT NOT NULL, 
+                exam_id INTEGER NOT NULL,
+                exam_name TEXT NOT NULL,
+                correct INTEGER NOT NULL,
+                wrong INTEGER NOT NULL,
+                total INTEGER NOT NULL,
+                percent REAL NOT NULL,
+                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-        // ROZWIĄZANE ZADANIA
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS solved (
-                "user" TEXT NOT NULL,
-                task_id INTEGER NOT NULL,
-                is_correct INTEGER NOT NULL,
-                mode TEXT NOT NULL DEFAULT 'standard',
-                earned_points INTEGER,
-                PRIMARY KEY ("user", task_id, mode)
-            );
-        `);
+        // ROZWIĄZANE ZADANIA
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS solved (
+                "user" TEXT NOT NULL,
+                task_id INTEGER NOT NULL,
+                is_correct INTEGER NOT NULL,
+                mode TEXT NOT NULL DEFAULT 'standard',
+                earned_points INTEGER,
+                PRIMARY KEY ("user", task_id, mode)
+            );
+        `);
 
-        // Sprawdzenie i utworzenie admina
-        const adminPassword = process.env.ADMIN_CODE || 'admin123';
-        const adminHash = bcrypt.hashSync(adminPassword, saltRounds);
-        
-        await client.query(
-            `INSERT INTO users (name, password_hash, role) VALUES ($1, $2, $3)
-             ON CONFLICT (name) DO UPDATE SET password_hash = $2, role = $3`,
-            ['admin', adminHash, 'admin']
-        );
-        
-        console.log("Tabele PostgreSQL zweryfikowane/utworzone.");
-        client.release();
-    } catch (err) {
-        console.error("Błąd inicjalizacji bazy danych PostgreSQL:", err);
-        throw err; 
-    }
+        // Sprawdzenie i utworzenie admina
+        const adminPassword = process.env.ADMIN_CODE || 'admin123';
+        const adminHash = bcrypt.hashSync(adminPassword, saltRounds);
+        
+        await client.query(
+            `INSERT INTO users (name, password_hash, role) VALUES ($1, $2, $3)
+             ON CONFLICT (name) DO UPDATE SET password_hash = $2, role = $3`,
+            ['admin', adminHash, 'admin']
+        );
+        
+        console.log("Tabele PostgreSQL zweryfikowane/utworzone.");
+        client.release();
+    } catch (err) {
+        console.error("Błąd inicjalizacji bazy danych PostgreSQL:", err);
+        throw err; 
+    }
 }
 // --- KONIEC SEKCJI INICJALIZACJI ---
 
@@ -179,7 +179,7 @@ app.post("/api/login-student", async (req, res) => {
     }
     const match = bcrypt.compareSync(password, user.password_hash);
     if (!match) {
-      return res.status(401).json({ error: "Nieprawidłowa nazwa użytkownika lub hasła." });
+      return res.status(401).json({ error: "Nieprawidłowa nazwa użytkownika lub hasło." });
     }
     const token = signToken(user);
     res.json({ token, role: user.role, name: user.name });
@@ -228,12 +228,6 @@ app.get("/api/tasks", auth(), async (req, res) => {
     }
 });
 
-app.post("/api/exams", auth("admin"), async (req, res) => {
-    console.log("Odebrane Body:", req.body); // <-- TA LINIA
-
-    const { name, taskIds, arkuszName } = req.body || {};
-});
-
 app.put("/api/tasks/:id", auth("admin"), async (req, res) => {
     const { id } = req.params;
     const { odpowiedz, punkty, opcje } = req.body;
@@ -250,58 +244,53 @@ app.put("/api/tasks/:id", auth("admin"), async (req, res) => {
     }
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/tasks/random
 app.get("/api/tasks/random", auth(), async (req, res) => {
-    const { type, incorrect, mode = 'standard' } = req.query;
-    let queryText;
-    const params = [req.user.name, mode]; 
+    const { type, incorrect, mode = 'standard' } = req.query;
+    let queryText;
+    const params = [req.user.name, mode]; 
 
-    if (incorrect === 'true') {
-        // ZAPYTANIE 1: POBIERANIE ZADAŃ ROZWIĄZANYCH BŁĘDNIE
-        queryText = `SELECT T.* FROM tasks T INNER JOIN solved S ON T.id = S.task_id WHERE S."user" = $1 AND S.mode = $2 AND S.is_correct = 0`;
-        if (type === 'zamkniete' || type === 'otwarte') {
-            queryText += ' AND T.type = $3';
-            params.push(type); 
-        }
-    } else {
-        // ZAPYTANIE 2: POBIERANIE ZADAŃ JESZCZE NIE ROZWIĄZANYCH
-        queryText = `SELECT * FROM tasks WHERE id NOT IN (SELECT task_id FROM solved WHERE "user" = $1 AND mode = $2)`;
-        if (type === 'zamkniete' || type === 'otwarte') {
-            queryText += ' AND type = $3';
-            params.push(type); 
-        }
-    }
-    queryText += ' ORDER BY RANDOM() LIMIT 1';
+    if (incorrect === 'true') {
+        queryText = `SELECT T.* FROM tasks T INNER JOIN solved S ON T.id = S.task_id WHERE S."user" = $1 AND S.mode = $2 AND S.is_correct = 0`;
+        if (type === 'zamkniete' || type === 'otwarte') {
+            queryText += ' AND T.type = $3';
+            params.push(type); 
+        }
+    } else {
+        queryText = `SELECT * FROM tasks WHERE id NOT IN (SELECT task_id FROM solved WHERE "user" = $1 AND mode = $2)`;
+        if (type === 'zamkniete' || type === 'otwarte') {
+            queryText += ' AND type = $3';
+            params.push(type); 
+        }
+    }
+    queryText += ' ORDER BY RANDOM() LIMIT 1';
 
-    try {
-        // !!! JAWNE UŻYCIE TRIM() !!!
-        const result = await pool.query(queryText.trim(), params); 
-        res.json(result.rows[0] || null);
-    } catch(e) {
-        console.error("BŁĄD W API /api/tasks/random:", e);
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+    try {
+        const result = await pool.query(queryText.trim(), params); 
+        res.json(result.rows[0] || null);
+    } catch(e) {
+        console.error("BŁĄD W API /api/tasks/random:", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 // --- Solved Tasks ---
-// WYSZUKAJ TEN FRAGMENT W SWOIM PLIKU I ZASTĄP GO PONIŻSZYM
 app.post("/api/solved", auth(), async (req, res) => {
-    const { taskId, isCorrect, mode = 'standard', earnedPoints } = req.body || {};
-    if (!taskId) return res.status(400).json({ error: "Brak taskId" });
-    const points = earnedPoints !== undefined ? Number(earnedPoints) : (isCorrect ? 1 : 0);
-    try {
-        await pool.query(
-            `INSERT INTO solved ("user", task_id, is_correct, mode, earned_points) 
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT ("user", task_id, mode) 
-             DO UPDATE SET is_correct = $3, earned_points = $5`,
-            [req.user.name, Number(taskId), isCorrect ? 1 : 0, mode, points]
-        );
-        res.json({ success: true });
-    } catch (e) {
-        console.error("Błąd podczas zapisywania rozwiązania: ", e);
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+    const { taskId, isCorrect, mode = 'standard', earnedPoints } = req.body || {};
+    if (!taskId) return res.status(400).json({ error: "Brak taskId" });
+    const points = earnedPoints !== undefined ? Number(earnedPoints) : (isCorrect ? 1 : 0);
+    try {
+        await pool.query(
+            `INSERT INTO solved ("user", task_id, is_correct, mode, earned_points) 
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT ("user", task_id, mode) 
+             DO UPDATE SET is_correct = $3, earned_points = $5`,
+            [req.user.name, Number(taskId), isCorrect ? 1 : 0, mode, points]
+        );
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Błąd podczas zapisywania rozwiązania: ", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 app.delete("/api/solved", auth(), async (req, res) => {
@@ -331,7 +320,7 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
   res.json({ success: true, files });
 });
 
-// --- Bulk Task Creation (Z POPRAWKĄ NR 2) ---
+// --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   const { tasks } = req.body || {};
   if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
@@ -340,8 +329,6 @@ app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   try {
     await client.query('BEGIN');
     for (const t of tasks) {
-        // ZMIANA TUTAJ: Jawna serializacja do JSON string, 
-        // aby upewnić się, że baza danych akceptuje format.
         const opcjeJsonString = JSON.stringify(t.opcje); 
         await client.query(
             `INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -356,6 +343,19 @@ app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+app.delete("/api/tasks/:id", auth("admin"), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query("DELETE FROM solved WHERE task_id = $1", [id]);
+        const result = await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
+        
+        if (result.rowCount > 0) res.status(204).send();
+        else res.status(404).json({ error: "Zadanie nie znaleziono." });
+    } catch (e) {
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 // --- Exams ---
@@ -393,34 +393,66 @@ app.put("/api/exams/:id", auth("admin"), async (req, res) => {
     }
 });
 
+// ==================================================================
+// ===             POPRAWIONY ENDPOINT POST /api/exams            ===
+// ==================================================================
+// Ten kod akceptuje 'taskIds' jako STRING (np. "[1,2,3]") 
+// i zapisuje ten string bezpośrednio do bazy.
 app.post("/api/exams", auth("admin"), async (req, res) => {
-  const { name, taskIds, arkuszName } = req.body || {};
-  if (!name || !Array.isArray(taskIds) || !taskIds.length) return res.status(400).json({ error: "Brak nazwy lub zadań" });
-  
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const examInfo = await client.query(
-        "INSERT INTO exams (name, tasks) VALUES ($1, $2) RETURNING id", 
-        [name, JSON.stringify(taskIds)]
-    );
-    
-    if (arkuszName) {
-        await client.query(
-            "UPDATE tasks SET arkusz = $1 WHERE id = ANY($2::int[])", 
-            [arkuszName, taskIds]
-        );
+    console.log("Odebrane Body:", req.body); // Linia diagnostyczna
+
+    // Odbieramy 'taskIds' jako STRING
+    const { name, taskIds, arkuszName } = req.body || {}; 
+
+    // NOWA WALIDACJA: Sprawdzamy, czy 'name' istnieje i czy 'taskIds' jest STRINGIEM
+    if (!name || typeof taskIds !== 'string' || taskIds.length < 3) { // < 3 bo minimum to "[]"
+        return res.status(400).json({ error: "Brak nazwy lub niepoprawny format taskIds (oczekiwano stringa JSON)" });
     }
-    
-    await client.query('COMMIT');
-    res.json({ success: true, id: examInfo.rows[0].id });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message });
-  } finally {
-    client.release();
-  }
+
+    let parsedTaskIds;
+    try {
+        // Parsujemy string, aby sprawdzić, czy jest poprawną tablicą
+        // Będziemy jej też potrzebować do aktualizacji 'arkuszName'
+        parsedTaskIds = JSON.parse(taskIds); 
+        
+        if (!Array.isArray(parsedTaskIds) || !parsedTaskIds.length) {
+             return res.status(400).json({ error: "taskIds jest pustą tablicą wewnątrz stringa" });
+        }
+    } catch (e) {
+        return res.status(400).json({ error: "Błąd parsowania stringa taskIds: " + e.message });
+    }
+
+    // Jeśli walidacja przeszła, kontynuujemy
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // ZAPISUJEMY ORYGINALNY STRING (taskIds) do kolumny 'tasks'
+        const examInfo = await client.query(
+            "INSERT INTO exams (name, tasks) VALUES ($1, $2) RETURNING id", 
+            [name, taskIds] // Zapisujemy string, który przyszedł
+        );
+        
+        // Jeśli podano 'arkuszName', aktualizujemy zadania UŻYWAJĄC SPARSOWANEJ TABLICY
+        if (arkuszName) {
+            await client.query(
+                "UPDATE tasks SET arkusz = $1 WHERE id = ANY($2::int[])", 
+                [arkuszName, parsedTaskIds] // Używamy sparsowanej tablicy
+            );
+        }
+        
+        await client.query('COMMIT');
+        res.json({ success: true, id: examInfo.rows[0].id });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: "Błąd podczas tworzenia egzaminu: " + e.message });
+    } finally {
+        client.release();
+    }
 });
+// ==================================================================
+// ===             KONIEC POPRAWIONEGO ENDPOINTU                ===
+// ==================================================================
 
 app.delete("/api/exams/:id", auth("admin"), async (req, res) => {
     const { id } = req.params;
@@ -448,133 +480,121 @@ app.post("/api/results", auth(), async (req, res) => {
     }
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/stats
 app.get("/api/stats", auth(), async (req, res) => {
-    const user = req.user.name; 
-    
-    try {
-        // ZAPYTANIE 1: Generalne Statystyki Rozwiązanych Zadań
-        const generalStatsRes = await pool.query(`
-            SELECT COUNT(s."user") AS total_solved, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS total_correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS total_wrong
-            FROM solved s WHERE s."user" = $1 AND s.mode = 'standard'
-        `, [user]);
-        
-        // ZAPYTANIE 2: Statystyki Wg Typu Zadań
-        const typeStatsRes = await pool.query(`
-            SELECT t.type, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS wrong
-            FROM solved s JOIN tasks t ON s.task_id = t.id
-            WHERE s."user" = $1 AND s.mode = 'standard' GROUP BY t.type
-        `, [user]);
-        
-        // ZAPYTANIE 3: Agregaty Egzaminów
-        const examAggregatesRes = await pool.query(`
-            SELECT MAX(percent) AS highestScore, AVG(percent) AS averageScore
-            FROM results WHERE "user" = $1
-        `, [user]);
+    const user = req.user.name; 
+    
+    try {
+        const generalStatsRes = await pool.query(`
+            SELECT COUNT(s."user") AS total_solved, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS total_correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS total_wrong
+            FROM solved s WHERE s."user" = $1 AND s.mode = 'standard'
+        `, [user]);
+        
+        const typeStatsRes = await pool.query(`
+            SELECT t.type, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, SUM(CASE WHEN s.is_correct = 0 THEN 1 ELSE 0 END) AS wrong
+            FROM solved s JOIN tasks t ON s.task_id = t.id
+            WHERE s."user" = $1 AND s.mode = 'standard' GROUP BY t.type
+        `, [user]);
+        
+        const examAggregatesRes = await pool.query(`
+            SELECT MAX(percent) AS highestScore, AVG(percent) AS averageScore
+            FROM results WHERE "user" = $1
+        `, [user]);
 
-        // ZAPYTANIE 4: Historia Egzaminów
-        const solvedExamsRes = await pool.query(
-            'SELECT exam_name, correct, total, percent FROM results WHERE "user" = $1 ORDER BY id DESC', 
-            [user]
-        );
+        const solvedExamsRes = await pool.query(
+            'SELECT exam_name, correct, total, percent FROM results WHERE "user" = $1 ORDER BY id DESC', 
+            [user]
+        );
 
-        const generalStats = generalStatsRes.rows[0] || {};
-        const examAggregates = examAggregatesRes.rows[0] || {};
+        const generalStats = generalStatsRes.rows[0] || {};
+        const examAggregates = examAggregatesRes.rows[0] || {};
 
-        generalStats.highestScore = examAggregates.highestscore || 0;
-        generalStats.averageScore = examAggregates.averageScore || 0;
-        
-        const formattedTypeStats = typeStatsRes.rows.reduce((acc, curr) => {
-            acc[curr.type] = { correct: Number(curr.correct) || 0, wrong: Number(curr.wrong) || 0 };
-            return acc;
-        }, {});
-        
-        res.json({ generalStats, typeStats: formattedTypeStats, solvedExams: solvedExamsRes.rows });
-    } catch (e) {
-        console.error("BŁĄD W API /api/stats:", e);
-        res.status(500).json({ error: "Błąd API: " + e.message });
-    }
+        generalStats.highestScore = examAggregates.highestscore || 0;
+        generalStats.averageScore = examAggregates.averageScore || 0;
+        
+        const formattedTypeStats = typeStatsRes.rows.reduce((acc, curr) => {
+            acc[curr.type] = { correct: Number(curr.correct) || 0, wrong: Number(curr.wrong) || 0 };
+            return acc;
+        }, {});
+        
+        res.json({ generalStats, typeStats: formattedTypeStats, solvedExams: solvedExamsRes.rows });
+    } catch (e) {
+        console.error("BŁĄD W API /api/stats:", e);
+        res.status(500).json({ error: "Błąd API: " + e.message });
+    }
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats
 app.get("/api/games/player-card-stats", auth(), async (req, res) => {
-    const user = req.user.name; 
-    try {
-        // ZAPYTANIE 1: Statystyki punktowe z zadań w trybie 'games'
-        const gameModeStatsRes = await pool.query(`
-            SELECT t.type, SUM(s.earned_points) AS points, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, COUNT(*) AS total
-            FROM solved s JOIN tasks t ON s.task_id = t.id
-            WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
-        `.trim(), [user]); // !!! JAWNE UŻYCIE TRIM() !!!
-        
-        // ZAPYTANIE 2: Średnia z egzaminów
-        const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`.trim(), [user]); // !!! JAWNE UŻYCIE TRIM() !!!
+    const user = req.user.name; 
+    try {
+        const gameModeStatsRes = await pool.query(`
+            SELECT t.type, SUM(s.earned_points) AS points, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, COUNT(*) AS total
+            FROM solved s JOIN tasks t ON s.task_id = t.id
+            WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
+        `.trim(), [user]); 
+        
+        const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`.trim(), [user]);
 
-        const gameModeStats = gameModeStatsRes.rows;
-        const closedData = gameModeStats.find(r => r.type === 'zamkniete') || {};
-        const openData = gameModeStats.find(r => r.type === 'otwarte') || {};
-        const examData = examDataRes.rows[0];
+        const gameModeStats = gameModeStatsRes.rows;
+        const closedData = gameModeStats.find(r => r.type === 'zamkniete') || {};
+        const openData = gameModeStats.find(r => r.type === 'otwarte') || {};
+        const examData = examDataRes.rows[0];
 
-        res.json({
-            name: user,
-            totalPoints: (Number(closedData.points) || 0) + (Number(openData.points) || 0),
-            closedPoints: Number(closedData.points) || 0,
-            openPoints: Number(openData.points) || 0,
-            solvedClosedTotal: Number(closedData.total) || 0,
-            solvedOpenTotal: Number(openData.total) || 0,
-            avgExamPercent: (examData?.avg_percent || 0).toFixed(0),
-            effectiveness: gameModeStats.map(t => ({
-                type: t.type,
-                percentage: t.total > 0 ? ((t.correct / t.total) * 100).toFixed(0) : 0,
-                details: `${t.correct || 0}/${t.total || 0}`
-            }))
-        });
-    } catch (e) {
-        console.error("BŁĄD W API /api/games/player-card-stats:", e);
-        res.status(500).json({ error: "Błąd API: " + e.message });
-    }
+        res.json({
+            name: user,
+            totalPoints: (Number(closedData.points) || 0) + (Number(openData.points) || 0),
+            closedPoints: Number(closedData.points) || 0,
+            openPoints: Number(openData.points) || 0,
+            solvedClosedTotal: Number(closedData.total) || 0,
+            solvedOpenTotal: Number(openData.total) || 0,
+            avgExamPercent: (examData?.avg_percent || 0).toFixed(0),
+            effectiveness: gameModeStats.map(t => ({
+                type: t.type,
+                percentage: t.total > 0 ? ((t.correct / t.total) * 100).toFixed(0) : 0,
+                details: `${t.correct || 0}/${t.total || 0}`
+            }))
+        });
+    } catch (e) {
+        console.error("BŁĄD W API /api/games/player-card-stats:", e);
+        res.status(500).json({ error: "Błąd API: " + e.message });
+  m
+}
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/leaderboard
 app.get("/api/games/leaderboard", auth(), async (req, res) => {
-    const { type = 'all' } = req.query;
-    try {
-        let leaderboardQuery;
-        if (type === 'all') {
-            // ZAPYTANIE 1: ALL (Punkty z zadań + punkty z egzaminów)
-            leaderboardQuery = await pool.query(`
-                SELECT "user", SUM(points) as total_points FROM (
-                    SELECT s."user", s.earned_points as points FROM solved s WHERE s.mode = 'games'
-                    UNION ALL
-                    SELECT "user", (CAST(percent / 10 AS INTEGER) * 5) as points FROM results
-                ) AS combined_scores GROUP BY "user" ORDER BY total_points DESC LIMIT 100
-            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
-        } else if (type === 'closed') {
-            // ZAPYTANIE 2: ZAMKNIĘTE
-            leaderboardQuery = await pool.query(`
-                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
-                WHERE t.type = 'zamkniete' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
-            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
-        } else if (type === 'open') {
-            // ZAPYTANIE 3: OTWARTE
-            leaderboardQuery = await pool.query(`
-                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
-                WHERE t.type = 'otwarte' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
-            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
-        } else if (type === 'exams') {
-            // ZAPYTANIE 4: EGZAMINY (Średnia procentowa)
-            leaderboardQuery = await pool.query(`
-                SELECT "user", AVG(percent) as avg_percent FROM results
-                GROUP BY "user" ORDER BY avg_percent DESC LIMIT 100
-            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
-        } else {
-            return res.status(400).json({ error: "Nieprawidłowy typ rankingu" });
-        }
-        res.json(leaderboardQuery.rows);
-    } catch (e) {
-        console.error("BŁĄD W API /api/games/leaderboard:", e);
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+    const { type = 'all' } = req.query;
+    try {
+        let leaderboardQuery;
+        if (type === 'all') {
+            leaderboardQuery = await pool.query(`
+                SELECT "user", SUM(points) as total_points FROM (
+                    SELECT s."user", s.earned_points as points FROM solved s WHERE s.mode = 'games'
+                    UNION ALL
+                    SELECT "user", (CAST(percent / 10 AS INTEGER) * 5) as points FROM results
+                ) AS combined_scores GROUP BY "user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); 
+        } else if (type === 'closed') {
+            leaderboardQuery = await pool.query(`
+                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
+                WHERE t.type = 'zamkniete' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); 
+        } else if (type === 'open') {
+            leaderboardQuery = await pool.query(`
+                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
+                WHERE t.type = 'otwarte' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); 
+        } else if (type === 'exams') {
+            leaderboardQuery = await pool.query(`
+                SELECT "user", AVG(percent) as avg_percent FROM results
+                GROUP BY "user" ORDER BY avg_percent DESC LIMIT 100
+            `.trim()); 
+        } else {
+            return res.status(400).json({ error: "Nieprawidłowy typ rankingu" });
+        }
+        res.json(leaderboardQuery.rows);
+    } catch (e) {
+        console.error("BŁĄD W API /api/games/leaderboard:", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 
