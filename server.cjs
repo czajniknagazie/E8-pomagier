@@ -228,6 +228,12 @@ app.get("/api/tasks", auth(), async (req, res) => {
     }
 });
 
+app.post("/api/exams", auth("admin"), async (req, res) => {
+    console.log("Odebrane Body:", req.body); // <-- TA LINIA
+
+    const { name, taskIds, arkuszName } = req.body || {};
+});
+
 app.put("/api/tasks/:id", auth("admin"), async (req, res) => {
     const { id } = req.params;
     const { odpowiedz, punkty, opcje } = req.body;
