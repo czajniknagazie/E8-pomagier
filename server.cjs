@@ -217,9 +217,7 @@ app.get("/api/tasks", auth(), async (req, res) => {
         queryText += ' WHERE id::text LIKE $1 OR arkusz LIKE $1';
         params.push(`%${search}%`);
     }
-    
-    // Zmieniamy to:
-    queryText += ' ORDER BY id DESC LIMIT 50'; // <--- DODAJEMY OGRANICZENIE
+    queryText += ' ORDER BY id DESC';
     
     try {
         const result = await pool.query(queryText, params);
