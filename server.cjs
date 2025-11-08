@@ -273,22 +273,24 @@ app.get("/api/tasks/random", auth(), async (req, res) => {
 });
 
 // --- Solved Tasks ---
+// WYSZUKAJ TEN FRAGMENT W SWOIM PLIKU I ZASTĄP GO PONIŻSZYM
 app.post("/api/solved", auth(), async (req, res) => {
-  const { taskId, isCorrect, mode = 'standard', earnedPoints } = req.body || {};
-  if (!taskId) return res.status(400).json({ error: "Brak taskId" });
-  const points = earnedPoints !== undefined ? Number(earnedPoints) : (isCorrect ? 1 : 0);
-  try {
-    await pool.query(
-        `INSERT INTO solved ("user", task_id, is_correct, mode, earned_points) 
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT ("user", task_id, mode) 
-         DO UPDATE SET is_correct = $3, earned_points = $5`,
-        [req.user.name, Number(taskId), isCorrect ? 1 : 0, mode, points]
-    );
-    res.json({ success: true });
-  } catch (e) {
-   res.status(400).json({ error: e.message });
-  }
+    const { taskId, isCorrect, mode = 'standard', earnedPoints } = req.body || {};
+    if (!taskId) return res.status(400).json({ error: "Brak taskId" });
+    const points = earnedPoints !== undefined ? Number(earnedPoints) : (isCorrect ? 1 : 0);
+    try {
+        await pool.query(
+            `INSERT INTO solved ("user", task_id, is_correct, mode, earned_points) 
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT ("user", task_id, mode) 
+             DO UPDATE SET is_correct = $3, earned_points = $5`,
+            [req.user.name, Number(taskId), isCorrect ? 1 : 0, mode, points]
+        );
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Błąd podczas zapisywania rozwiązania: ", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 app.delete("/api/solved", auth(), async (req, res) => {
