@@ -928,317 +928,192 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- ADMIN VIEWS ---
-let adminTasksSearchTerm = ''; // Zmienna do przechowywania aktualnego wyszukiwania
+    // Admin Tasks Management
+    async function renderAdminTasks() {
+        mainContent.innerHTML = `
+            <h1>Zarządzaj Zadaniami</h1>
+            <div class="content-box wide">
+                <button id="show-add-task-form">Dodaj nowe zadania (masowo)</button>
+                <div id="add-task-form-container" class="hidden" style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 20px;"></div>
+                <hr>
+                <h2>Istniejące zadania</h2>
+                <div id="admin-tasks-list">Ładowanie...</div>
+            </div>`;
 
-async function renderAdminTasks() {
-    mainContent.innerHTML = `
-        <h1>Zarządzaj Zadami</h1>
-        <div class="admin-controls">
-            <input type="text" id="admin-task-search" placeholder="Szukaj ID, treści, arkusza..." value="${adminTasksSearchTerm}">
-            <button id="admin-task-search-btn">Szukaj</button>
-            <button id="admin-task-reset-btn">Resetuj</button>
-            <button id="add-task-btn" class="primary-btn">Dodaj Zadanie</button>
-        </div>
-        <div id="admin-tasks-list">Ładowanie zadań...</div>
-    `;
-
-    // Obsługa wyszukiwania
-    document.getElementById('admin-task-search-btn').addEventListener('click', () => {
-        adminTasksSearchTerm = document.getElementById('admin-task-search').value;
-        renderAdminTasksList();
-    });
-    document.getElementById('admin-task-reset-btn').addEventListener('click', () => {
-        adminTasksSearchTerm = '';
-        document.getElementById('admin-task-search').value = '';
-        renderAdminTasksList();
-    });
-    document.getElementById('admin-task-search').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            adminTasksSearchTerm = document.getElementById('admin-task-search').value;
-            renderAdminTasksList();
-        }
-    });
-
-    document.getElementById('add-task-btn').addEventListener('click', () => renderAdminEditTask(null));
-
-    renderAdminTasksList();
-}
-
-async function renderAdminTasksList() {
-    const listContainer = document.getElementById('admin-tasks-list');
-    if (!listContainer) return;
-    listContainer.innerHTML = 'Ładowanie...';
-
-    // Pobierz tylko 50 zadań, aby uniknąć przeciążenia
-    const tasks = await api.request(`/tasks?search=${adminTasksSearchTerm}&limit=50`); 
-    
-    if (tasks && tasks.length) {
-        let tasksHtml = `<ul class="admin-item-list">`;
-        tasksHtml += tasks.map(task => `
-            <li class="admin-list-item">
-                <span>ID: ${task.id} (${task.punkty} pkt) | Typ: ${task.type} | Arkusz: ${task.arkusz}</span>
-                <div class="admin-actions">
-                    <button class="edit-task-btn" data-task-id="${task.id}">Edytuj</button>
-                    <button class="delete-task-btn danger-btn" data-task-id="${task.id}">Usuń</button>
-                </div>
-            </li>
-        `).join('');
-        tasksHtml += `</ul>`;
-        listContainer.innerHTML = tasksHtml;
-
-        document.querySelectorAll('.edit-task-btn').forEach(btn => 
-            btn.addEventListener('click', (e) => navigateTo('admin-edytuj-zadanie', e.target.dataset.taskId))
-        );
-        document.querySelectorAll('.delete-task-btn').forEach(btn => 
-            btn.addEventListener('click', (e) => handleDeleteTask(e.target.dataset.taskId))
-        );
-    } else {
-        listContainer.innerHTML = `<p>Brak zadań pasujących do kryteriów. ${adminTasksSearchTerm ? 'Wyszukaj inne frazy.' : ''}</p>`;
+        document.getElementById('show-add-task-form').addEventListener('click', renderBulkAddTaskForm);
+        
+        const tasks = await api.request('/tasks');
+        if(!tasks) return;
+        const listEl = document.getElementById('admin-tasks-list');
+        listEl.innerHTML = `
+            <ul class="item-list">
+                ${tasks.map(task => `
+                    <li class="task-list-item">
+                        <img src="${task.tresc}" alt="Miniatura">
+                        <div>
+                            <strong>Zadanie #${task.id}</strong><br>
+                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}, Odp: ${task.odpowiedz}</small>
+                        </div>
+                        <div></div>
+                    </li>
+                `).join('')}
+            </ul>`;
     }
-}
 
-async function handleDeleteTask(taskId) {
-    if (!confirm(`Czy na pewno chcesz usunąć zadanie o ID: ${taskId}? Ta operacja jest nieodwracalna.`)) {
-        return;
-    }
-    const result = await api.request(`/tasks/${taskId}`, 'DELETE');
-    if (result) {
-        alert('Zadanie usunięte pomyślnie!');
-        renderAdminTasks();
-    }
-}
-
-async function renderAdminEditTask(taskId) {
-    let task = null;
-    let isNew = !taskId;
-    
-    if (!isNew) {
-        task = await api.request(`/tasks/${taskId}`);
-        if (!task) {
-            alert('Nie udało się załadować zadania do edycji.');
-            navigateTo('admin-zadania');
+    function renderBulkAddTaskForm() {
+        const formContainer = document.getElementById('add-task-form-container');
+        formContainer.classList.toggle('hidden');
+        if (formContainer.classList.contains('hidden')) {
+            formContainer.innerHTML = '';
             return;
         }
-    }
-    
-    mainContent.innerHTML = `
-        <h1>${isNew ? 'Dodaj Nowe Zadanie' : `Edytuj Zadanie #${taskId}`}</h1>
-        <form id="admin-task-form" class="admin-form">
-            <label for="task-type">Typ zadania:</label>
-            <select id="task-type" required>
-                <option value="zamkniete" ${task?.type === 'zamkniete' ? 'selected' : ''}>Zamknięte</option>
-                <option value="otwarte" ${task?.type === 'otwarte' ? 'selected' : ''}>Otwarte</option>
+        
+        formContainer.innerHTML = `
+            <h3>Krok 1: Wybierz typ i załącz pliki</h3>
+            <label for="task-type">Typ zadań:</label>
+            <select id="task-type">
+                <option value="zamkniete">Zamknięte</option>
+                <option value="otwarte">Otwarte</option>
             </select>
+            <input type="file" id="task-files" multiple accept="image/*" style="margin-left: 10px;">
+            <hr>
+            <h3>Krok 2: Uzupełnij dane dla każdego zadania</h3>
+            <div id="bulk-upload-preview"></div>
+            <button id="save-bulk-tasks" class="hidden">Zapisz wszystkie zadania</button>
+        `;
 
-            <label for="task-punkty">Punkty (max):</label>
-            <input type="number" id="task-punkty" value="${task?.punkty || 1}" min="1" required>
+        document.getElementById('task-files').addEventListener('change', handleFileSelectionForBulkAdd);
+        document.getElementById('save-bulk-tasks').addEventListener('click', handleSaveBulkTasks);
+    }
 
-            <label for="task-arkusz">Arkusz (np. Maj 2024):</label>
-            <input type="text" id="task-arkusz" value="${task?.arkusz || ''}" required>
-            
-            <label for="task-tresc-url">URL Treści (Obraz):</label>
-            <input type="text" id="task-tresc-url" value="${task?.tresc || ''}" placeholder="Pełny URL do obrazu" required>
+    async function handleFileSelectionForBulkAdd(e) {
+        const files = e.target.files;
+        if (!files.length) return;
 
-            <label for="task-odpowiedz">Poprawna Odpowiedź (lub URL do odpowiedzi):</label>
-            <textarea id="task-odpowiedz" rows="3" required>${task?.odpowiedz || ''}</textarea>
-
-            <div id="opcje-container" style="${task?.type === 'otwarte' ? 'display: none;' : ''}">
-                <label for="task-opcje">Opcje (rozdziel przecinkami - tylko dla zamkniętych):</label>
-                <textarea id="task-opcje" rows="3">${task?.opcje?.join(', ') || ''}</textarea>
-            </div>
-            
-            <label>Przesyłanie plików:</label>
-            <input type="file" id="task-files" multiple>
-            <button type="button" id="upload-files-btn">Wgraj pliki i uzupełnij pola</button>
-            <div id="upload-status" style="margin-top: 10px;"></div>
-
-            <button type="submit" class="primary-btn">${isNew ? 'Dodaj Zadanie' : 'Zapisz Zmiany'}</button>
-            <button type="button" onclick="navigateTo('admin-zadania')" class="secondary-btn">Anuluj</button>
-        </form>
-    `;
-
-    document.getElementById('task-type').addEventListener('change', (e) => {
-        document.getElementById('opcje-container').style.display = e.target.value === 'zamkniete' ? 'block' : 'none';
-        document.getElementById('task-punkty').value = e.target.value === 'zamkniete' ? 1 : (task?.punkty || 3);
-    });
-    
-    // Obsługa przesyłania plików
-    document.getElementById('upload-files-btn').addEventListener('click', async () => {
-        const filesInput = document.getElementById('task-files');
-        const statusDiv = document.getElementById('upload-status');
-        if (filesInput.files.length === 0) {
-            alert('Wybierz pliki do wgrania.');
+        const uploadResult = await api.upload(files);
+        if (!uploadResult || !uploadResult.files) {
             return;
         }
         
-        statusDiv.innerHTML = 'Wgrywanie...';
-        const result = await api.upload(filesInput.files);
+        const previewContainer = document.getElementById('bulk-upload-preview');
+        const taskType = document.getElementById('task-type').value;
+        previewContainer.innerHTML = '';
 
-        if (result && result.files && result.files.length > 0) {
-            statusDiv.innerHTML = 'Wgrano pomyślnie. Wypełniam pola...';
-            
-            // Przyjmujemy, że pierwszy wgrany plik to treść zadania (URL treści)
-            document.getElementById('task-tresc-url').value = result.files[0];
-            
-            // Jeśli wgrano dwa pliki, drugi to odpowiedź
-            if (result.files.length > 1) {
-                document.getElementById('task-odpowiedz').value = result.files[1];
-            }
-        } else {
-            statusDiv.innerHTML = 'Błąd przesyłania plików.';
-        }
-    });
+        uploadResult.files.forEach((file) => {
+            previewContainer.innerHTML += `
+                <div class="upload-item" data-url="${file.url}">
+                    <img src="${file.url}" alt="Podgląd zadania">
+                    <label>Odpowiedź:</label>
+                    <input type="text" name="odpowiedz" required>
+                    <label>Punkty:</label>
+                    <input type="number" name="punkty" value="1" min="1" required>
+                    ${taskType === 'zamkniete' ? `
+                        <label>Opcje (oddzielone przecinkiem):</label>
+                        <input type="text" name="opcje" placeholder="A,B,C,D" required>
+                    ` : ''}
+                </div>`;
+        });
+        document.getElementById('save-bulk-tasks').classList.remove('hidden');
+    }
 
-
-    // Obsługa formularza (dodanie/edycja)
-    document.getElementById('admin-task-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const data = {
-            type: document.getElementById('task-type').value,
-            punkty: parseInt(document.getElementById('task-punkty').value, 10),
-            arkusz: document.getElementById('task-arkusz').value,
-            tresc: document.getElementById('task-tresc-url').value,
-            odpowiedz: document.getElementById('task-odpowiedz').value,
-        };
-
-        if (data.type === 'zamkniete') {
-            const opcje = document.getElementById('task-opcje').value.split(',').map(s => s.trim()).filter(s => s.length > 0);
-            if (opcje.length < 2) {
-                alert('Dla zadania zamkniętego wymagane są co najmniej dwie opcje!');
-                return;
-            }
-            data.opcje = opcje;
-            // Dla zadań zamkniętych punkty zawsze powinny wynosić 1
-            data.punkty = 1; 
-        }
-
-        const endpoint = isNew ? '/tasks' : `/tasks/${taskId}`;
-        const method = isNew ? 'POST' : 'PUT';
+    async function handleSaveBulkTasks() {
+        const previewContainer = document.getElementById('bulk-upload-preview');
+        const taskItems = previewContainer.querySelectorAll('.upload-item');
+        const taskType = document.getElementById('task-type').value;
         
-        const result = await api.request(endpoint, method, data);
+        const tasksPayload = [];
+        let isValid = true;
 
+        taskItems.forEach(item => {
+            const tresc = item.dataset.url;
+            const odpowiedz = item.querySelector('input[name="odpowiedz"]').value;
+            const punkty = item.querySelector('input[name="punkty"]').value;
+            
+            if (!odpowiedz || !punkty) {
+                isValid = false;
+            }
+
+            const taskData = {
+                type: taskType,
+                tresc,
+                odpowiedz,
+                punkty
+            };
+
+            if (taskType === 'zamkniete') {
+                const opcjeRaw = item.querySelector('input[name="opcje"]').value;
+                if (!opcjeRaw) isValid = false;
+                taskData.opcje = opcjeRaw.split(',').map(o => o.trim());
+            }
+            tasksPayload.push(taskData);
+        });
+
+        if (!isValid) {
+            alert('Uzupełnij wszystkie pola dla każdego zadania!');
+            return;
+        }
+
+        const result = await api.request('/tasks/bulk', 'POST', { tasks: tasksPayload });
         if (result) {
-            alert(isNew ? 'Zadanie dodane pomyślnie!' : 'Zadanie zaktualizowane pomyślnie!');
+            alert(`Dodano ${result.count} nowych zadań.`);
             navigateTo('admin-zadania');
         }
-    });
-}
-
-// ----------------------------------------------------------------------
-// ZARZĄDZANIE EGZAMINAMI
-// ----------------------------------------------------------------------
-
-async function renderAdminExams() {
-    mainContent.innerHTML = `
-        <h1>Zarządzaj Egzaminami</h1>
-        <div class="admin-controls">
-            <button id="add-exam-btn" class="primary-btn">Dodaj Egzamin</button>
-        </div>
-        <div id="admin-exams-list">Ładowanie egzaminów...</div>
-    `;
-
-    document.getElementById('add-exam-btn').addEventListener('click', () => renderAdminEditExam(null));
+    }
     
-    const listContainer = document.getElementById('admin-exams-list');
-    const exams = await api.request('/exams'); 
-    
-    if (exams && exams.length) {
-        let examsHtml = `<ul class="admin-item-list">`;
-        examsHtml += exams.map(exam => `
-            <li class="admin-list-item">
-                <span>ID: ${exam.id} | Nazwa: ${exam.name} | Liczba zadań: ${JSON.parse(exam.taskIds).length}</span>
-                <div class="admin-actions">
-                    <button class="edit-exam-btn" data-exam-id="${exam.id}">Edytuj</button>
-                    <button class="delete-exam-btn danger-btn" data-exam-id="${exam.id}">Usuń</button>
-                </div>
-            </li>
-        `).join('');
-        examsHtml += `</ul>`;
-        listContainer.innerHTML = examsHtml;
-
-        document.querySelectorAll('.edit-exam-btn').forEach(btn => 
-            btn.addEventListener('click', (e) => renderAdminEditExam(e.target.dataset.examId))
-        );
-        document.querySelectorAll('.delete-exam-btn').forEach(btn => 
-            btn.addEventListener('click', (e) => handleDeleteExam(e.target.dataset.examId))
-        );
-    } else {
-        listContainer.innerHTML = `<p>Brak dostępnych egzaminów.</p>`;
-    }
-}
-
-async function handleDeleteExam(examId) {
-    if (!confirm(`Czy na pewno chcesz usunąć egzamin o ID: ${examId}? Ta operacja jest nieodwracalna.`)) {
-        return;
-    }
-    const result = await api.request(`/exams/${examId}`, 'DELETE');
-    if (result) {
-        alert('Egzamin usunięty pomyślnie!');
-        renderAdminExams();
-    }
-}
-
-async function renderAdminEditExam(examId) {
-    let exam = null;
-    let isNew = !examId;
-
-    if (!isNew) {
-        exam = await api.request(`/exams/${examId}`);
-        if (!exam) {
-            alert('Nie udało się załadować egzaminu do edycji.');
-            navigateTo('admin-egzaminy');
-            return;
-        }
-    }
-
-    // Wyświetl widok edycji
-    mainContent.innerHTML = `
-        <h1>${isNew ? 'Dodaj Nowy Egzamin' : `Edytuj Egzamin #${examId}`}</h1>
-        <form id="admin-exam-form" class="admin-form">
-            <label for="exam-name">Nazwa egzaminu:</label>
-            <input type="text" id="exam-name" value="${exam?.name || ''}" required>
-
-            <label for="exam-taskIds">Lista ID zadań (format JSON Array, np. [1, 5, 20]):</label>
-            <textarea id="exam-taskIds" rows="10" required>${exam?.taskIds || ''}</textarea>
-
-            <button type="submit" class="primary-btn">${isNew ? 'Dodaj Egzamin' : 'Zapisz Zmiany'}</button>
-            <button type="button" onclick="navigateTo('admin-egzaminy')" class="secondary-btn">Anuluj</button>
-        </form>
-    `;
-    
-    document.getElementById('admin-exam-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const data = {
-            name: document.getElementById('exam-name').value,
-            taskIds: document.getElementById('exam-taskIds').value // Wysłane jako string
-        };
-
-        // Podstawowa walidacja JSON Array
-        try {
-            const parsedIds = JSON.parse(data.taskIds);
-            if (!Array.isArray(parsedIds) || parsedIds.some(id => typeof id !== 'number' || id <= 0)) {
-                throw new Error("Elementy nie są liczbami lub są niepoprawne.");
-            }
-        } catch (error) {
-            alert("Błąd walidacji listy ID zadań. Upewnij się, że format to [1, 5, 20] i zawiera tylko liczby.");
-            return;
-        }
-
-
-        const endpoint = isNew ? '/exams' : `/exams/${examId}`;
-        const method = isNew ? 'POST' : 'PUT';
+    async function renderAdminExams() {
+        mainContent.innerHTML = `
+            <h1>Zarządzaj Egzaminami</h1>
+            <div class="content-box wide">
+                <h3>Stwórz nowy egzamin</h3>
+                <p>Zaznacz zadania z listy poniżej, a następnie wpisz nazwę i kliknij "Stwórz Egzamin".</p>
+                <form id="create-exam-form" style="display:flex; gap:10px; margin-bottom: 20px;">
+                    <input type="text" id="new-exam-name" placeholder="Nazwa nowego egzaminu" required class="task-input">
+                    <input type="text" id="new-exam-arkusz" placeholder="Nazwa arkusza dla zadań" required class="task-input">
+                    <button type="submit">Stwórz Egzamin</button>
+                </form>
+                <hr>
+                <h3>Wybierz zadania do egzaminu</h3>
+                <div id="exam-tasks-list">Ładowanie...</div>
+            </div>`;
         
-        const result = await api.request(endpoint, method, data);
+        const tasks = await api.request('/tasks');
+        if(!tasks) return;
+        const listEl = document.getElementById('exam-tasks-list');
+        listEl.innerHTML = `
+            <ul class="item-list">
+                ${tasks.map(task => `
+                    <li class="task-list-item">
+                        <input type="checkbox" value="${task.id}" style="transform: scale(1.5);">
+                        <img src="${task.tresc}" alt="Miniatura">
+                        <div>
+                            <strong>Zadanie #${task.id}</strong><br>
+                            <small>Typ: ${task.type}, Arkusz: ${task.arkusz || 'brak'}</small>
+                        </div>
+                    </li>
+                `).join('')}
+            </ul>`;
+            
+        document.getElementById('create-exam-form').addEventListener('submit', handleCreateExam);
+    }
 
-        if (result) {
-            alert(isNew ? 'Egzamin dodany pomyślnie!' : 'Egzamin zaktualizowany pomyślnie!');
-            navigateTo('admin-egzaminy');
+    async function handleCreateExam(e) {
+        e.preventDefault();
+        const name = document.getElementById('new-exam-name').value;
+        const arkuszName = document.getElementById('new-exam-arkusz').value;
+        const selectedCheckboxes = document.querySelectorAll('#exam-tasks-list input[type="checkbox"]:checked');
+        const taskIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+
+        if (!name || !arkuszName || taskIds.length === 0) {
+            alert('Wpisz nazwę egzaminu, nazwę arkusza i zaznacz co najmniej jedno zadanie.');
+            return;
         }
-    });
-}
+
+        const result = await api.request('/exams', 'POST', { name, taskIds, arkuszName });
+        if (result) {
+            alert(`Pomyślnie utworzono egzamin "${name}".`);
+            navigateTo('egzaminy');
+        }
+    }
 
     // --- TRYB GIER ---
     
