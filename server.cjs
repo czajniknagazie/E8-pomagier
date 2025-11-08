@@ -268,7 +268,8 @@ app.get("/api/tasks/random", auth(), async (req, res) => {
     queryText += ' ORDER BY RANDOM() LIMIT 1';
 
     try {
-        const result = await pool.query(queryText, params);
+        // !!! JAWNE UŻYCIE TRIM() !!!
+        const result = await pool.query(queryText.trim(), params); 
         res.json(result.rows[0] || null);
     } catch(e) {
         console.error("BŁĄD W API /api/tasks/random:", e);
@@ -489,17 +490,19 @@ app.get("/api/stats", auth(), async (req, res) => {
     }
 });
 
-// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats (Dla pewności)
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/player-card-stats
 app.get("/api/games/player-card-stats", auth(), async (req, res) => {
     const user = req.user.name; 
     try {
+        // ZAPYTANIE 1: Statystyki punktowe z zadań w trybie 'games'
         const gameModeStatsRes = await pool.query(`
             SELECT t.type, SUM(s.earned_points) AS points, SUM(CASE WHEN s.is_correct = 1 THEN 1 ELSE 0 END) AS correct, COUNT(*) AS total
             FROM solved s JOIN tasks t ON s.task_id = t.id
             WHERE s."user" = $1 AND s.mode = 'games' GROUP BY t.type
-        `, [user]);
+        `.trim(), [user]); // !!! JAWNE UŻYCIE TRIM() !!!
         
-        const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`, [user]);
+        // ZAPYTANIE 2: Średnia z egzaminów
+        const examDataRes = await pool.query(`SELECT AVG(percent) AS avg_percent FROM results WHERE "user" = $1`.trim(), [user]); // !!! JAWNE UŻYCIE TRIM() !!!
 
         const gameModeStats = gameModeStatsRes.rows;
         const closedData = gameModeStats.find(r => r.type === 'zamkniete') || {};
@@ -526,40 +529,46 @@ app.get("/api/games/player-card-stats", auth(), async (req, res) => {
     }
 });
 
+// ZNAJDŹ I ZASTĄP CAŁY ENDPOINT /api/games/leaderboard
 app.get("/api/games/leaderboard", auth(), async (req, res) => {
-    const { type = 'all' } = req.query;
-    try {
-        let leaderboardQuery;
-        if (type === 'all') {
-            leaderboardQuery = await pool.query(`
-                SELECT "user", SUM(points) as total_points FROM (
-                    SELECT s."user", s.earned_points as points FROM solved s WHERE s.mode = 'games'
-                    UNION ALL
-                    SELECT "user", (CAST(percent / 10 AS INTEGER) * 5) as points FROM results
-                ) AS combined_scores GROUP BY "user" ORDER BY total_points DESC LIMIT 100
-            `);
-        } else if (type === 'closed') {
-            leaderboardQuery = await pool.query(`
-                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
-                WHERE t.type = 'zamkniete' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
-            `);
-        } else if (type === 'open') {
-            leaderboardQuery = await pool.query(`
-                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
-                WHERE t.type = 'otwarte' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
-            `);
-        } else if (type === 'exams') {
-             leaderboardQuery = await pool.query(`
-                 SELECT "user", AVG(percent) as avg_percent FROM results
-                 GROUP BY "user" ORDER BY avg_percent DESC LIMIT 100
-             `);
-        } else {
-            return res.status(400).json({ error: "Nieprawidłowy typ rankingu" });
-        }
-        res.json(leaderboardQuery.rows);
-    } catch (e) {
-        res.status(500).json({ error: "Błąd serwera: " + e.message });
-    }
+    const { type = 'all' } = req.query;
+    try {
+        let leaderboardQuery;
+        if (type === 'all') {
+            // ZAPYTANIE 1: ALL (Punkty z zadań + punkty z egzaminów)
+            leaderboardQuery = await pool.query(`
+                SELECT "user", SUM(points) as total_points FROM (
+                    SELECT s."user", s.earned_points as points FROM solved s WHERE s.mode = 'games'
+                    UNION ALL
+                    SELECT "user", (CAST(percent / 10 AS INTEGER) * 5) as points FROM results
+                ) AS combined_scores GROUP BY "user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
+        } else if (type === 'closed') {
+            // ZAPYTANIE 2: ZAMKNIĘTE
+            leaderboardQuery = await pool.query(`
+                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
+                WHERE t.type = 'zamkniete' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
+        } else if (type === 'open') {
+            // ZAPYTANIE 3: OTWARTE
+            leaderboardQuery = await pool.query(`
+                SELECT s."user", SUM(s.earned_points) as total_points FROM solved s JOIN tasks t ON s.task_id = t.id
+                WHERE t.type = 'otwarte' AND s.mode = 'games' GROUP BY s."user" ORDER BY total_points DESC LIMIT 100
+            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
+        } else if (type === 'exams') {
+            // ZAPYTANIE 4: EGZAMINY (Średnia procentowa)
+            leaderboardQuery = await pool.query(`
+                SELECT "user", AVG(percent) as avg_percent FROM results
+                GROUP BY "user" ORDER BY avg_percent DESC LIMIT 100
+            `.trim()); // !!! JAWNE UŻYCIE TRIM() !!!
+        } else {
+            return res.status(400).json({ error: "Nieprawidłowy typ rankingu" });
+        }
+        res.json(leaderboardQuery.rows);
+    } catch (e) {
+        console.error("BŁĄD W API /api/games/leaderboard:", e);
+        res.status(500).json({ error: "Błąd serwera: " + e.message });
+    }
 });
 
 
