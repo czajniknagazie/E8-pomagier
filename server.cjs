@@ -320,35 +320,30 @@ app.post("/api/upload", auth("admin"), upload.array("files", 50), (req, res) => 
 
 // --- Bulk Task Creation ---
 app.post("/api/tasks/bulk", auth("admin"), async (req, res) => {
-  const { tasks } = req.body || {};
-  if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
+  const { tasks } = req.body || {};
+  if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "Brak zadań" });
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    for (const t of tasks) {
-        let opcjeObject = null;
-        if (t.opcje) {
-            try {
-                opcjeObject = JSON.parse(t.opcje);
-            } catch {
-                opcjeObject = t.opcje;
-            }
-        }
-        
-        await client.query(
-            `INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [t.type, t.tresc, t.odpowiedz, opcjeObject, Number(t.punkty) || 1, t.arkusz]
-        );
-    }
-    await client.query('COMMIT');
-    res.json({ success: true, count: tasks.length });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: "Błąd serwera: " + e.message });
-  } finally {
-    client.release();
-  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const t of tasks) {
+        // ZMIANA: Usuwamy cały blok try/catch z JSON.parse()
+        // Wysłane t.opcje JEST JUŻ gotową tablicą JavaScript, 
+        // którą PostgreSQL (JSONB) zaakceptuje.
+        
+        await client.query(
+            `INSERT INTO tasks (type, tresc, odpowiedz, opcje, punkty, arkusz) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [t.type, t.tresc, t.odpowiedz, t.opcje, Number(t.punkty) || 1, t.arkusz] // Używamy bezpośrednio t.opcje
+        );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, count: tasks.length });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: "Błąd serwera: " + e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.delete("/api/tasks/:id", auth("admin"), async (req, res) => {
