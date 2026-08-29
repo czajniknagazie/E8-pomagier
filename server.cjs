@@ -394,44 +394,57 @@ app.put("/api/exams/:id", auth("admin"), async (req, res) => {
 });
 
 // --- POPRAWIONY ENDPOINT POST /api/exams ---
-// Akceptuje 'taskIds' jako STRING (np. "[1,2,3]")
+// Akceptuje 'taskIds' zarówno jako tablicę [1,2,3], jak i string JSON "[1,2,3]"
 app.post("/api/exams", auth("admin"), async (req, res) => {
     console.log("Odebrane Body:", req.body); // Linia diagnostyczna
 
     const { name, taskIds, arkuszName } = req.body || {}; 
 
-    // NOWA WALIDACJA: Sprawdzamy, czy 'name' istnieje i czy 'taskIds' jest STRINGIEM
-    if (!name || typeof taskIds !== 'string' || taskIds.length < 3) { // < 3 bo minimum to "[]"
-        return res.status(400).json({ error: "Brak nazwy lub niepoprawny format taskIds (oczekiwano stringa JSON)" });
+    // --- POPRAWKA WALIDACJI (akceptuje tablicę oraz string) ---
+    if (!name) {
+        return res.status(400).json({ error: "Brak nazwy egzaminu." });
     }
 
-    let parsedTaskIds;
-    try {
-        // Parsujemy string, aby sprawdzić, czy jest poprawną tablicą
-        parsedTaskIds = JSON.parse(taskIds); 
-        
-        if (!Array.isArray(parsedTaskIds) || !parsedTaskIds.length) {
-             return res.status(400).json({ error: "taskIds jest pustą tablicą wewnątrz stringa" });
+    let parsedTaskIds = [];
+    let jsonStringTaskIds = "";
+
+    if (Array.isArray(taskIds)) {
+        parsedTaskIds = taskIds;
+        jsonStringTaskIds = JSON.stringify(taskIds);
+    } else if (typeof taskIds === 'string') {
+        try {
+            parsedTaskIds = JSON.parse(taskIds);
+            jsonStringTaskIds = taskIds;
+            if (!Array.isArray(parsedTaskIds)) {
+                return res.status(400).json({ error: "String taskIds nie zawiera prawidłowej tablicy." });
+            }
+        } catch (e) {
+            return res.status(400).json({ error: "Błąd parsowania stringa taskIds: " + e.message });
         }
-    } catch (e) {
-        return res.status(400).json({ error: "Błąd parsowania stringa taskIds: " + e.message });
+    } else {
+        return res.status(400).json({ error: "Niepoprawny format taskIds (oczekiwano tablicy lub stringa JSON)." });
     }
+
+    if (!parsedTaskIds.length) {
+        return res.status(400).json({ error: "Lista taskIds nie może być pusta." });
+    }
+    // --- KONIEC POPRAWKI ---
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
-        // ZAPISUJEMY ORYGINALNY STRING (taskIds) do kolumny 'tasks'
+        // ZAPISUJEMY STRING JSON do kolumny 'tasks'
         const examInfo = await client.query(
             "INSERT INTO exams (name, tasks) VALUES ($1, $2) RETURNING id", 
-            [name, taskIds] // Zapisujemy string, który przyszedł
+            [name, jsonStringTaskIds] 
         );
         
         // Jeśli podano 'arkuszName', aktualizujemy zadania UŻYWAJĄC SPARSOWANEJ TABLICY
         if (arkuszName) {
             await client.query(
                 "UPDATE tasks SET arkusz = $1 WHERE id = ANY($2::int[])", 
-                [arkuszName, parsedTaskIds] // Używamy sparsowanej tablicy
+                [arkuszName, parsedTaskIds] 
             );
         }
         
