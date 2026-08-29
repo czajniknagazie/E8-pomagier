@@ -393,28 +393,23 @@ app.put("/api/exams/:id", auth("admin"), async (req, res) => {
     }
 });
 
-// --- POPRAWIONY ENDPOINT POST /api/exams ---
-// Akceptuje 'taskIds' zarówno jako tablicę [1,2,3], jak i string JSON "[1,2,3]"
+// --- POPRAWIONY ENDPOINT POST /api/exams (z odwróceniem kolejności) ---
 app.post("/api/exams", auth("admin"), async (req, res) => {
-    console.log("Odebrane Body:", req.body); // Linia diagnostyczna
+    console.log("Odebrane Body:", req.body);
 
     const { name, taskIds, arkuszName } = req.body || {}; 
 
-    // --- POPRAWKA WALIDACJI (akceptuje tablicę oraz string) ---
     if (!name) {
         return res.status(400).json({ error: "Brak nazwy egzaminu." });
     }
 
     let parsedTaskIds = [];
-    let jsonStringTaskIds = "";
 
     if (Array.isArray(taskIds)) {
         parsedTaskIds = taskIds;
-        jsonStringTaskIds = JSON.stringify(taskIds);
     } else if (typeof taskIds === 'string') {
         try {
             parsedTaskIds = JSON.parse(taskIds);
-            jsonStringTaskIds = taskIds;
             if (!Array.isArray(parsedTaskIds)) {
                 return res.status(400).json({ error: "String taskIds nie zawiera prawidłowej tablicy." });
             }
@@ -428,19 +423,20 @@ app.post("/api/exams", auth("admin"), async (req, res) => {
     if (!parsedTaskIds.length) {
         return res.status(400).json({ error: "Lista taskIds nie może być pusta." });
     }
-    // --- KONIEC POPRAWKI ---
+
+    // ODWRACAMY KOLEJNOŚĆ, aby zadania zapisywały się od pierwszego do ostatniego:
+    parsedTaskIds.reverse();
+    const jsonStringTaskIds = JSON.stringify(parsedTaskIds);
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
-        // ZAPISUJEMY STRING JSON do kolumny 'tasks'
         const examInfo = await client.query(
             "INSERT INTO exams (name, tasks) VALUES ($1, $2) RETURNING id", 
             [name, jsonStringTaskIds] 
         );
         
-        // Jeśli podano 'arkuszName', aktualizujemy zadania UŻYWAJĄC SPARSOWANEJ TABLICY
         if (arkuszName) {
             await client.query(
                 "UPDATE tasks SET arkusz = $1 WHERE id = ANY($2::int[])", 
